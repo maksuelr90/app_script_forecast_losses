@@ -313,13 +313,51 @@ function obterForecastPorSemana_(dataInicio, dataFim) {
   return executarQuery_(query);
 }
 
+// ===== Cache de queries (compartilhado por Gerencial/Analítico/Deep Dive) =====
+// TTL curto: cobre cliques repetidos/troca de filtro na mesma sessão (o
+// cenário mais comum de query repetida) sem deixar o dado velho por muito
+// tempo caso uma sincronização acabe de atualizar as tabelas.
+const QUERY_CACHE_TTL_SEGUNDOS = 90;
+
 // ===== Executa a query e devolve como array de objetos =====
+// Evita recriar um job do BigQuery (que tem latência própria de criação +
+// fila, mesmo pra queries pequenas) quando a MESMA query já rodou há pouco.
 function executarQuery_(query) {
+  const cache = CacheService.getScriptCache();
+  // A versão muda no instante em que uma sincronização termina (ver
+  // DataBase.gs, bloco de conclusão) - isso invalida todo o cache na hora,
+  // sem precisar esperar o TTL de 90s expirar sozinho. O TTL continua
+  // existindo como segunda camada de segurança (ex: se por algum motivo a
+  // versão não for atualizada).
+  const versaoCache = PropertiesService.getScriptProperties().getProperty('QUERY_CACHE_VERSION') || '0';
+  const chaveCache = 'bq_' + versaoCache + '_' + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, query)
+  );
+
+  const cacheado = cache.get(chaveCache);
+  if (cacheado) {
+    try {
+      return JSON.parse(cacheado);
+    } catch (e) {
+      Logger.log('Cache corrompido para a query, recalculando: ' + e.message);
+    }
+  }
+
   const response = BigQuery.Jobs.query(
     { query: query, useLegacySql: false, location: BQ_CONFIG.LOCATION },
     BQ_CONFIG.PROJECT_ID
   );
-  return linhasBigQueryParaObjetos_(response);
+  const linhas = linhasBigQueryParaObjetos_(response);
+
+  try {
+    cache.put(chaveCache, JSON.stringify(linhas), QUERY_CACHE_TTL_SEGUNDOS);
+  } catch (e) {
+    // Resultado grande demais para o cache (limite ~100KB por chave) -
+    // segue sem cache nesse caso específico, sem quebrar a consulta.
+    Logger.log('Resultado não cacheado (provavelmente excede limite de tamanho): ' + e.message);
+  }
+
+  return linhas;
 }
 
 // ===== Converte o resultado bruto do BigQuery.Jobs.query em array de objetos =====
