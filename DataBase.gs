@@ -27,27 +27,39 @@ const BQ_CONFIG = {
 // ===== FONTES DE DADOS =====
 // Cada fonte é uma API do DataSuite com sua própria tabela oficial + tabela temp no BigQuery.
 // Para adicionar uma nova fonte no futuro, basta acrescentar um item aqui.
+// partitionField: coluna DATE usada pra particionar a tabela (reduz bytes
+// escaneados quando as queries filtram por período - é o caso de quase
+// todas as abas). clusterFields: colunas usadas nos filtros WHERE/GROUP BY
+// mais frequentes (station_code aparece em praticamente toda query).
+// Só têm efeito na CRIAÇÃO da tabela (tabelas já existentes não são alteradas
+// automaticamente - ver observação em ensureTableExists_).
 const SOURCES = [
   {
     key: 'fwd',
     apiName: 'brbi_opslgc.inventory_forecast_losses_fwd',
     version: '98jxj9f37nfdmz8g',
     tableId: 'inventory_forecast_losses_fwd',
-    tempTableId: 'inventory_forecast_losses_fwd_temp'
+    tempTableId: 'inventory_forecast_losses_fwd_temp',
+    partitionField: 'data_base_loss',
+    clusterFields: ['station_code', 'macro_status']
   },
   {
     key: 'losses',
     apiName: 'brbi_opslgc.inventory_forecast_losses_losses',
     version: '6omrilsppgkoacdt',
     tableId: 'inventory_forecast_losses_losses',
-    tempTableId: 'inventory_forecast_losses_losses_temp'
+    tempTableId: 'inventory_forecast_losses_losses_temp',
+    partitionField: 'data_base_loss',
+    clusterFields: ['station_code']
   },
   {
     key: 'volume',
     apiName: 'brbi_opslgc.inventory_forecast_losses_volume',
     version: 'j5e1k47fzrz2ibwo',
     tableId: 'inventory_forecast_losses_volume',
-    tempTableId: 'inventory_forecast_losses_volume_temp'
+    tempTableId: 'inventory_forecast_losses_volume_temp',
+    partitionField: 'dia',
+    clusterFields: ['station_code']
   }
 ];
 
@@ -177,6 +189,40 @@ function buscarShard_(fetchUrlTemplate, shard, token) {
   return JSON.parse(body);
 }
 
+// ===== Busca vários shards em PARALELO (1 round-trip de rede pra todos) =====
+// UrlFetchApp.fetchAll dispara todas as requisições de uma vez e espera todas
+// responderem - troca N chamadas sequenciais (N x latência) por 1 chamada
+// paralela (latência do mais lento do lote). Mesma autenticação/headers da
+// versão sequencial (buscarShard_), só que em lote.
+function buscarShardsEmParalelo_(fetchUrlTemplate, shards, token) {
+  const options = {
+    method: 'get',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'X-End-User': CONFIG.END_USER,
+      'X-System-Name': CONFIG.SYSTEM_NAME,
+      "dataservice-sdk-type": "appscript"
+    },
+    muteHttpExceptions: true
+  };
+
+  const requests = shards.map(shard => Object.assign(
+    { url: fetchUrlTemplate.replace('{shard}', shard) },
+    options
+  ));
+
+  const responses = UrlFetchApp.fetchAll(requests);
+
+  return responses.map((response, i) => {
+    const code = response.getResponseCode();
+    const body = response.getContentText();
+    if (code !== 200) {
+      throw new Error(`Erro ao buscar shard ${shards[i]}: ${code} - ${body}`);
+    }
+    return JSON.parse(body);
+  });
+}
+
 // ===== Extrai o valor de grass_datetime da primeira linha de um shard =====
 function extrairGrassDatetime_(shardJson) {
   if (!shardJson.rows || shardJson.rows.length === 0) return null;
@@ -242,7 +288,12 @@ function mapTipoParaBigQuery_(tipoDataSuite) {
 }
 
 // ===== Garante que a tabela existe no BigQuery, criando-a se necessário =====
-function ensureTableExists_(resultSchema, tableId) {
+// sourceConfig (opcional): objeto da fonte em SOURCES, usado para aplicar
+// partitionField (particionamento por dia) e clusterFields (clustering) na
+// CRIAÇÃO da tabela. Só tem efeito quando a tabela ainda não existe - trocar
+// esses campos numa tabela já criada exige recriá-la (apagar e deixar o
+// próximo ciclo recriar, já que a temp é recriada a cada sincronização).
+function ensureTableExists_(resultSchema, tableId, sourceConfig) {
   const schemaFields = resultSchema.map(col => ({
     name: col.columnName,
     type: mapTipoParaBigQuery_(col.type),
@@ -265,6 +316,28 @@ function ensureTableExists_(resultSchema, tableId) {
         fields: schemaFields
       }
     };
+
+    // Só aplica partitioning se a coluna configurada realmente existir no
+    // schema retornado pelo DataSuite (evita erro de coluna inexistente).
+    const temColunaParticionamento = sourceConfig && sourceConfig.partitionField &&
+      schemaFields.some(f => f.name === sourceConfig.partitionField);
+
+    if (temColunaParticionamento) {
+      table.timePartitioning = {
+        type: 'DAY',
+        field: sourceConfig.partitionField
+      };
+      Logger.log(`Tabela ${tableId} particionada por "${sourceConfig.partitionField}".`);
+    }
+
+    const camposClusterValidos = sourceConfig && sourceConfig.clusterFields
+      ? sourceConfig.clusterFields.filter(nome => schemaFields.some(f => f.name === nome))
+      : [];
+
+    if (camposClusterValidos.length > 0) {
+      table.clustering = { fields: camposClusterValidos };
+      Logger.log(`Tabela ${tableId} com clustering em [${camposClusterValidos.join(', ')}].`);
+    }
 
     BigQuery.Tables.insert(table, BQ_CONFIG.PROJECT_ID, BQ_CONFIG.DATASET_ID);
     Logger.log(`Tabela ${tableId} criada com sucesso.`);
@@ -406,7 +479,8 @@ const SYNC_PROPS_KEYS = {
   GRASS_DETECTADO: 'SYNC_GRASS_DETECTADO',
   SHARDS_PROCESSADOS_TOTAL: 'SYNC_SHARDS_PROCESSADOS_TOTAL',
   SHARDS_CONHECIDOS_TOTAL: 'SYNC_SHARDS_CONHECIDOS_TOTAL',
-  ULTIMO_LOG: 'SYNC_ULTIMO_LOG'
+  ULTIMO_LOG: 'SYNC_ULTIMO_LOG',
+  JOBS_PRETRIGGER: 'SYNC_JOBS_PRETRIGGER'
 };
 
 const SYNC_TRIGGER_HANDLER = 'continueSync_';
@@ -524,6 +598,34 @@ function executarChecagemFreshness_() {
 // primeira via limparEstadoSync_ e poderia recriar o incidente de tabelas
 // deletadas/expiradas em operação, causado por duas sincronizações concorrentes
 // mexendo nas mesmas tabelas temp).
+// ===== Dispara a query de TODAS as fontes de uma vez, antes de processar
+// qualquer uma delas (fire-and-forget) =====
+// Gargalo original: fonte B só era DISPARADA no DataSuite depois que a fonte A
+// tinha sido 100% baixada e gravada no BigQuery - ou seja, o tempo de
+// processamento da query de B no DataSuite (que roda no lado deles, não no
+// nosso) era todo desperdiçado em série. Disparando as 3 de uma vez, o
+// DataSuite processa as consultas em paralelo enquanto ainda baixamos os
+// shards da fonte atual - quando chegar a vez de B/C, a query já estará
+// pronta (ou bem mais perto disso), reduzindo o tempo de poll quase a zero.
+// Falha ao pré-disparar uma fonte específica não quebra o processo: ela
+// simplesmente será disparada normalmente quando chegar sua vez (fallback).
+function pretriggerarTodasFontes_() {
+  const props = PropertiesService.getScriptProperties();
+  const token = getAccessToken_();
+  const jobsPorFonte = {};
+
+  SOURCES.forEach(source => {
+    try {
+      jobsPorFonte[source.key] = triggerQuery_(token, source);
+      Logger.log(`[${source.key}] Query pré-disparada: ${jobsPorFonte[source.key]}`);
+    } catch (erro) {
+      Logger.log(`[${source.key}] Falha ao pré-disparar (será disparada normalmente na vez dela): ${erro.message}`);
+    }
+  });
+
+  props.setProperty(SYNC_PROPS_KEYS.JOBS_PRETRIGGER, JSON.stringify(jobsPorFonte));
+}
+
 function startSync(forcar) {
   const props = PropertiesService.getScriptProperties();
 
@@ -578,6 +680,16 @@ function startSync(forcar) {
     }
 
     Logger.log(`Divergência confirmada - agendando processamento das ${SOURCES.length} fonte(s) via trigger.`);
+
+    // Dispara já as queries das 3 fontes no DataSuite (ver comentário da
+    // função) - se isso falhar por qualquer motivo, o fluxo normal (fallback
+    // dentro de continueSyncInterno_) garante que a sincronização continua
+    // funcionando, só sem esse ganho de tempo.
+    try {
+      pretriggerarTodasFontes_();
+    } catch (erro) {
+      Logger.log('Aviso: falha ao pré-disparar fontes (seguindo sem esse otimização): ' + erro.message);
+    }
 
     // A partir daqui, TODO o trabalho pesado (shards restantes + demais
     // fontes) roda via trigger no servidor - sem depender do chamador
@@ -728,6 +840,11 @@ function continueSyncInterno_() {
     if (sourceIndex >= SOURCES.length) {
       props.setProperty(SYNC_PROPS_KEYS.STATUS, 'DONE');
       removerTriggerSync_();
+      // Invalida o cache de queries do dashboard IMEDIATAMENTE (em vez de
+      // esperar o TTL de 90s expirar sozinho) - troca a "versão" usada na
+      // chave do cache em executarQuery_ (Gerencial.gs), então qualquer
+      // consulta feita a partir de agora já ignora o resultado antigo.
+      props.setProperty('QUERY_CACHE_VERSION', String(Date.now()));
       Logger.log('✅ Todas as fontes foram processadas. Sincronização concluída.');
       registrarLogSync_('✅ Sincronização concluída - todas as fontes atualizadas.');
       return;
@@ -736,6 +853,13 @@ function continueSyncInterno_() {
     const source = SOURCES[sourceIndex];
     let jobId = props.getProperty(SYNC_PROPS_KEYS.JOB_ID);
 
+    // Token buscado 1x por execução e reaproveitado em tudo abaixo (trigger,
+    // poll, shard 0 e os lotes de shards seguintes) - antes era buscado 2x
+    // (uma vez aqui embutido no bloco de início da fonte, outra vez de novo
+    // logo antes do loop de shards), gerando uma chamada OAuth desnecessária
+    // por fonte a cada execução.
+    const token = getAccessToken_();
+
     let fetchUrlTemplate, maxShard, nextShard, resultSchema, totalInseridas;
 
     if (!jobId) {
@@ -743,9 +867,17 @@ function continueSyncInterno_() {
       Logger.log(`--- Iniciando fonte "${source.key}" (${source.apiName}) ---`);
       registrarLogSync_(`Iniciando fonte "${source.key}"...`);
 
-      const token = getAccessToken_();
-      const novoJobId = triggerQuery_(token, source);
-      Logger.log(`[${source.key}] Job disparado: ${novoJobId}`);
+      // Reaproveita o job já disparado em pretriggerarTodasFontes_ (a query já
+      // pode estar pronta ou quase - evita esperar do zero). Se não houver
+      // (falha no pré-disparo), dispara agora normalmente (fallback).
+      const jobsPreTriggerados = JSON.parse(props.getProperty(SYNC_PROPS_KEYS.JOBS_PRETRIGGER) || '{}');
+      let novoJobId = jobsPreTriggerados[source.key];
+      if (novoJobId) {
+        Logger.log(`[${source.key}] Reaproveitando job pré-disparado: ${novoJobId}`);
+      } else {
+        novoJobId = triggerQuery_(token, source);
+        Logger.log(`[${source.key}] Job disparado agora (sem pré-disparo): ${novoJobId}`);
+      }
       registrarLogSync_(`[${source.key}] Consulta disparada, aguardando processamento...`);
 
       const meta = pollJobAteFinalizar_(token, novoJobId);
@@ -758,7 +890,7 @@ function continueSyncInterno_() {
       const schema = shard0Json.resultSchema || null;
 
       apagarTabelaSeExistir_(source.tempTableId);
-      ensureTableExists_(schema, source.tempTableId);
+      ensureTableExists_(schema, source.tempTableId, source);
 
       let inseridasShard0 = 0;
       if (shard0Json.rows && shard0Json.rows.length > 0) {
@@ -796,14 +928,24 @@ function continueSyncInterno_() {
       // de forma anômala), recria antes de continuar - evita o erro
       // "No schema specified on job or table" ao tentar inserir num destino
       // que não existe mais.
-      ensureTableExists_(resultSchema, source.tempTableId);
+      ensureTableExists_(resultSchema, source.tempTableId, source);
 
       Logger.log(`[${source.key}] Retomando a partir do shard ${nextShard} (de 0 a ${maxShard})`);
       registrarLogSync_(`[${source.key}] Retomando do shard ${nextShard} de ${maxShard + 1}...`);
     }
 
-    // ===== Processa os shards restantes desta fonte =====
-    const token = getAccessToken_(); // token novo, seguro reobter a cada leva
+    // ===== Processa os shards restantes desta fonte, em LOTES PARALELOS =====
+    // Antes: 1 requisição HTTP + 1 load job do BigQuery por shard (sequencial).
+    // Agora: até SHARD_BATCH_SIZE shards buscados em paralelo (fetchAll) e
+    // gravados juntos num ÚNICO load job por lote - reduz tanto o tempo de
+    // rede (round-trips) quanto a quantidade de load jobs (cada um tem
+    // overhead próprio de criação + polling em aguardarJobBigQuery_).
+    // Estado (NEXT_SHARD/TOTAL_INSERIDAS) só é salvo após o lote inteiro ser
+    // gravado com sucesso - se algo falhar no meio, o retry automático
+    // (agendarContinuacaoComBackoff_) refaz o lote inteiro do zero, sem
+    // corromper progresso já persistido.
+    const SHARD_BATCH_SIZE = 5;
+    // token já obtido acima (reaproveitado - ver comentário na declaração)
 
     while (nextShard <= maxShard) {
       if (Date.now() - inicioExecucao > MAX_EXECUTION_MS) {
@@ -815,20 +957,32 @@ function continueSyncInterno_() {
         return;
       }
 
-      const shardJson = buscarShard_(fetchUrlTemplate, nextShard, token);
-
-      if (shardJson.rows && shardJson.rows.length > 0) {
-        const inseridas = insertRowsToBigQuery_(shardJson.rows, resultSchema, source.tempTableId);
-        totalInseridas += inseridas;
-        Logger.log(`[${source.key}] Shard ${nextShard} - ${inseridas} linhas (total: ${totalInseridas})`);
+      const shardsDoLote = [];
+      for (let s = nextShard; s <= maxShard && shardsDoLote.length < SHARD_BATCH_SIZE; s++) {
+        shardsDoLote.push(s);
       }
 
-      registrarLogSync_(`[${source.key}] Shard ${nextShard} de ${maxShard + 1} gravado (total da fonte: ${totalInseridas} linhas)`);
+      const shardsJson = buscarShardsEmParalelo_(fetchUrlTemplate, shardsDoLote, token);
 
-      nextShard++;
+      let linhasDoLote = [];
+      shardsJson.forEach(shardJson => {
+        if (shardJson.rows && shardJson.rows.length > 0) {
+          linhasDoLote = linhasDoLote.concat(shardJson.rows);
+        }
+      });
+
+      if (linhasDoLote.length > 0) {
+        const inseridas = insertRowsToBigQuery_(linhasDoLote, resultSchema, source.tempTableId);
+        totalInseridas += inseridas;
+        Logger.log(`[${source.key}] Shards ${shardsDoLote[0]}-${shardsDoLote[shardsDoLote.length - 1]} - ${inseridas} linhas (total: ${totalInseridas})`);
+      }
+
+      registrarLogSync_(`[${source.key}] Shards ${shardsDoLote[0]} a ${shardsDoLote[shardsDoLote.length - 1]} de ${maxShard + 1} gravados (total da fonte: ${totalInseridas} linhas)`);
+
+      nextShard = shardsDoLote[shardsDoLote.length - 1] + 1;
       props.setProperty(SYNC_PROPS_KEYS.NEXT_SHARD, String(nextShard));
       props.setProperty(SYNC_PROPS_KEYS.TOTAL_INSERIDAS, String(totalInseridas));
-      incrementarProgressoShards_(0, 1); // mais 1 shard processado (progresso global)
+      incrementarProgressoShards_(0, shardsDoLote.length); // mais N shards processados (progresso global)
     }
 
     // ===== Fonte concluída: troca temp -> oficial e avança para a próxima =====
