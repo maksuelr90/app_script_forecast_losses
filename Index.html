@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Header</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; }
+
+  :root {
+    --bg-page: #f5f5f4;
+    --bg-header: #ffffff;
+    --bg-item: #f5f5f4;
+    --text-title: #1a1a1a;
+    --text-subtitle: #8a8a86;
+    --text-status: #4a4a48;
+    --tab-color: #79786f;
+    --tab-hover: #4a4a48;
+    --border-color: rgba(0,0,0,0.06);
+    --chart-realizado: #1f2049;
+    --chart-forecast: #e8622c;
+    --chart-target: #6b6b68;
+    --chart-mes-highlight: rgba(232, 98, 44, 0.07);
+  }
+
+  html[data-theme="dark"] {
+    --bg-page: #17171a;
+    --bg-header: #232326;
+    --bg-item: #2c2c31;
+    --text-title: #f0f0ee;
+    --text-subtitle: #a3a29c;
+    --text-status: #c9c9c5;
+    --tab-color: #9b9a94;
+    --tab-hover: #f0f0ee;
+    --border-color: rgba(255,255,255,0.08);
+    --chart-realizado: #8b8ff0;
+    --chart-forecast: #ff8a52;
+    --chart-target: #b5b4ae;
+    --chart-mes-highlight: rgba(255, 138, 82, 0.1);
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg-page); transition: background .2s ease; }
+
+  .dash-header { background: var(--bg-header); width: 100%; box-shadow: 0 1px 3px var(--border-color); transition: background .2s ease; }
+
+  .header-top { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 2px solid #e8622c; gap: 16px; }
+
+  .header-left { display: flex; align-items: center; gap: 12px; }
+
+  .logo-badge { width: 36px; height: 36px; border-radius: 9px; background: #e8622c; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; }
+
+  .title-block h1 { font-size: 15px; font-weight: 600; color: var(--text-title); line-height: 1.3; }
+  .title-block .subtitle { font-size: 11.5px; color: var(--text-subtitle); margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+
+  .status-block { text-align: right; }
+  .sync-badge { display: none; align-items: center; justify-content: flex-end; gap: 5px; font-size: 11px; font-weight: 600; color: #e8622c; margin-bottom: 3px; }
+  .sync-badge.visivel { display: flex; }
+  .sync-badge .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #e8622c; animation: pulsar 1.2s ease-in-out infinite; }
+  @keyframes pulsar { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  .status-line { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; color: var(--text-status); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #3fa855; flex-shrink: 0; }
+  .tags-line { font-size: 11px; color: #e8622c; margin-top: 2px; }
+
+  .theme-toggle { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 15px; line-height: 1; }
+  .theme-toggle:hover { background: var(--border-color); }
+
+  /* ===== Menu administrativo (engrenagem) ===== */
+  .admin-menu { display: none; position: absolute; top: 38px; right: 0; background: var(--bg-header); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); min-width: 220px; z-index: 50; overflow: hidden; }
+  .admin-menu.aberto { display: block; }
+  .admin-menu-item { padding: 10px 14px; font-size: 13px; color: var(--text-title); cursor: pointer; font-family: monospace; }
+  .admin-menu-item:hover { background: var(--border-color); }
+  .admin-menu-item + .admin-menu-item { border-top: 1px solid var(--border-color); }
+
+  .admin-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; align-items: center; justify-content: center; }
+  .admin-modal-overlay.aberto { display: flex; }
+  .admin-modal { background: var(--bg-header); border-radius: 10px; width: 640px; max-width: 92vw; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+  .admin-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border-color); font-weight: 700; color: var(--text-title); font-family: monospace; }
+  .admin-modal-fechar { background: none; border: none; color: var(--text-subtitle); font-size: 16px; cursor: pointer; padding: 4px 8px; }
+  .admin-modal-fechar:hover { color: var(--text-title); }
+  .admin-modal-log { flex: 1; overflow-y: auto; margin: 0; padding: 14px 16px; font-size: 11.5px; line-height: 1.6; color: var(--text-title); white-space: pre-wrap; word-break: break-word; }
+
+  .header-tabs { display: flex; align-items: center; padding: 0 20px; gap: 4px; overflow-x: auto; }
+
+  .tab { display: flex; align-items: center; gap: 6px; padding: 11px 14px; font-size: 13px; font-weight: 500; color: var(--tab-color); border-bottom: 2.5px solid transparent; cursor: pointer; white-space: nowrap; transition: color .15s ease; }
+  .tab:hover { color: var(--tab-hover); }
+  .tab.active { color: #e8622c; border-bottom-color: #e8622c; }
+
+  /* ===== Conteúdo das abas ===== */
+  .page-content { max-width: 1300px; margin: 20px auto; padding: 0 20px; }
+  .painel { display: none; }
+  .painel.active { display: block; }
+
+  .bloco-gerencial { margin-bottom: 32px; }
+  .bloco-titulo { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  .bloco-titulo h2 { font-size: 15px; font-weight: 700; color: var(--text-title); }
+  .bloco-titulo span { font-size: 12px; color: var(--text-subtitle); }
+
+  .filtro-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .filtro-bar label { font-size: 12.5px; color: var(--text-subtitle); font-weight: 500; }
+  .filtro-bar select { background: var(--bg-header); color: var(--text-title); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .filtro-bar select:focus { outline: 2px solid #e8622c; outline-offset: 1px; }
+
+  .kpi-row { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+  .kpi-card { background: var(--bg-header); border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 170px; box-shadow: 0 1px 3px var(--border-color); display: flex; flex-direction: column; position: relative; }
+  .kpi-card.kpi-card-critico { border: 1.5px solid #d9483f; box-shadow: 0 0 0 3px rgba(217,72,63,0.12); }
+  .kpi-badge-critico { position: absolute; top: -9px; right: 12px; font-size: 9.5px; font-weight: 700; letter-spacing: .3px; color: #fff; background: #d9483f; border-radius: 4px; padding: 2px 7px; line-height: 1.4; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
+  /* ===== Cards de causa raiz (Deep Dive) ===== */
+  .causaraiz-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+  .causaraiz-card { flex: 1; min-width: 260px; background: var(--bg-header); border-radius: 10px; border-top: 3px solid var(--tab-color); box-shadow: 0 1px 3px var(--border-color); padding: 14px 16px; display: flex; flex-direction: column; position: relative; }
+  .causaraiz-card.principal-driver { border-top-color: #d9483f; }
+  .causaraiz-badge-driver { position: absolute; top: -11px; left: 12px; font-size: 9.5px; font-weight: 700; letter-spacing: .3px; color: #fff; background: #d9483f; border-radius: 4px; padding: 2px 7px; }
+  .causaraiz-cabecalho { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
+  .causaraiz-nome { font-size: 15px; font-weight: 700; color: var(--text-title); }
+  .causaraiz-pct { font-size: 17px; font-weight: 700; }
+  .causaraiz-lossrate { font-size: 11px; color: var(--text-subtitle); text-align: right; }
+  .causaraiz-secao { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color); }
+  .causaraiz-secao-titulo { font-size: 11px; font-weight: 700; color: var(--text-subtitle); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 6px; }
+  .causaraiz-item { display: flex; justify-content: space-between; align-items: center; background: var(--bg-item); border-radius: 6px; padding: 6px 10px; margin-bottom: 5px; font-size: 12.5px; gap: 8px; color: var(--text-title); }
+  .causaraiz-item-ramificacao { background: none; padding: 4px 10px 4px 22px; margin-top: -2px; font-size: 11.5px; color: var(--text-subtitle); }
+
+  /* Rótulo dos pontos da linha "Limite de Perdas" - só aparece no hover,
+     pra não sobrepor os números fixos das colunas. */
+  .ponto-limite-grupo { cursor: default; }
+  .ponto-limite-rotulo { opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+  .ponto-limite-grupo:hover .ponto-limite-rotulo { opacity: 1; }
+  .ponto-limite-grupo:hover .ponto-limite-marcador { r: 4; }
+  .causaraiz-item-valores { display: flex; align-items: center; gap: 8px; }
+  .causaraiz-download-btn { flex-shrink: 0; width: 20px; height: 20px; border: none; border-radius: 4px; background: var(--border-color); color: var(--text-subtitle); cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .causaraiz-download-btn:hover { background: #e8622c; color: #fff; }
+  .causaraiz-download-btn:disabled { opacity: .5; cursor: wait; }
+  .causaraiz-item span:last-child { font-weight: 700; }
+  .causaraiz-insight { margin-top: auto; padding-top: 12px; }
+  .causaraiz-insight-box { border-left: 3px solid var(--tab-color); background: var(--bg-item); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.4; color: var(--text-title); }
+  .causaraiz-card.principal-driver .causaraiz-insight-box { border-left-color: #d9483f; }
+  .causaraiz-insight-titulo { font-weight: 700; margin-bottom: 3px; }
+  .kpi-arrow { display: flex; align-items: center; justify-content: center; color: var(--text-subtitle); font-size: 22px; padding: 0 2px; flex: 0 0 auto; }
+  .kpi-bar-wrap { margin-top: auto; padding-top: 10px; }
+  .kpi-bar-track { width: 100%; height: 5px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
+  .kpi-bar-fill { height: 100%; border-radius: 3px; }
+
+  .observacao-box { display: flex; align-items: flex-start; gap: 10px; background: var(--bg-header); border-left: 3px solid #e8622c; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; line-height: 1.5; color: var(--text-title); }
+  #observacao-recuperacao { display: flex; }
+  #observacao-recuperacao .observacao-box { flex: 1; margin-bottom: 0; }
+  .observacao-box.dentro-target { border-left-color: #3fa855; }
+  .observacao-box.tem-insalvavel { border-left-color: #d9483f; }
+  .observacao-lista { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .observacao-mes-item { padding-top: 8px; border-top: 1px solid var(--border-color); }
+  .observacao-mes-item:first-child { padding-top: 0; border-top: none; }
+  .observacao-mes-titulo { font-weight: 600; }
+  .observacao-semanas { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .observacao-semana-item { font-size: 12px; color: var(--text-subtitle); padding-left: 18px; }
+  .observacao-box .observacao-icone { font-size: 16px; flex-shrink: 0; }
+  .observacao-box strong { font-weight: 700; }
+  .kpi-label { font-size: 11.5px; color: var(--text-subtitle); margin-bottom: 6px; }
+  .kpi-value { font-size: 21px; font-weight: 700; color: var(--text-title); }
+  .kpi-sub { display: block; font-size: 11.5px; margin-top: 4px; font-weight: 500; }
+  .kpi-sub-row { display: flex; gap: 14px; margin-top: 4px; flex-wrap: wrap; }
+  .kpi-sub-row .kpi-sub { margin-top: 0; white-space: nowrap; }
+  .kpi-sub.positivo { color: #3fa855; }
+  .kpi-sub.negativo { color: #d9483f; }
+  .kpi-sub.neutro { color: var(--text-subtitle); }
+
+  .tabela-card { background: var(--bg-header); border-radius: 10px; padding: 6px 0 12px; box-shadow: 0 1px 3px var(--border-color); overflow-x: auto; margin-bottom: 16px; }
+  .grafico-card { background: var(--bg-header); border-radius: 10px; padding: 18px 20px 14px; box-shadow: 0 1px 3px var(--border-color); margin-bottom: 16px; }
+
+  /* ===== Layout gráfico + cards lado a lado (ex: Aging) ===== */
+  .grafico-com-kpis { display: flex; gap: 14px; align-items: stretch; margin-bottom: 16px; }
+  .grafico-com-kpis .grafico-card { flex: 3; min-width: 0; margin-bottom: 0; display: flex; flex-direction: column; justify-content: center; }
+  .grafico-com-kpis .kpi-coluna { flex: 1; min-width: 190px; display: flex; flex-direction: column; gap: 10px; }
+  .grafico-com-kpis .kpi-coluna .kpi-card { flex: none; min-width: 0; }
+  @media (max-width: 860px) {
+    .grafico-com-kpis { flex-direction: column; }
+  }
+  .grafico-legenda { display: flex; gap: 18px; margin-bottom: 10px; font-size: 11.5px; color: var(--text-subtitle); flex-wrap: wrap; }
+  .grafico-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+  .legenda-cor { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .legenda-linha { width: 14px; height: 0; border-top: 2px dashed var(--chart-target); display: inline-block; }
+  .tabela-estacoes { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tabela-estacoes th { text-align: left; padding: 12px 16px; color: var(--text-subtitle); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+  .tabela-estacoes td { padding: 10px 16px; color: var(--text-title); border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+  .tabela-estacoes tr:last-child td { border-bottom: none; }
+  .tabela-estacoes tr.linha-mes-atual { background: rgba(232,98,44,0.06); }
+  .estado-vazio { text-align: center; padding: 30px; color: var(--text-subtitle); font-size: 13px; }
+
+  /* ===== Ranking de SOCs ===== */
+  .tabela-ranking th, .tabela-ranking td { text-align: center; }
+  .tabela-ranking th:nth-child(1), .tabela-ranking td:nth-child(1),
+  .tabela-ranking th:nth-child(2), .tabela-ranking td:nth-child(2) { text-align: left; position: sticky; left: 0; background: var(--bg-header); }
+  .tabela-ranking th:nth-child(1) { left: 0; z-index: 2; }
+  .tabela-ranking td:nth-child(2), .tabela-ranking th:nth-child(2) { left: 40px; z-index: 2; }
+  .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--border-color); color: var(--text-title); }
+  .rank-celula-vazia { color: var(--text-subtitle); }
+  .tabela-ranking tr.linha-destaque td { background: rgba(232,98,44,0.12); }
+  .tabela-ranking tr.linha-destaque td:nth-child(2) { font-weight: 700; color: #e8622c; }
+
+  /* ===== Carregamento (spinner + barra de progresso) ===== */
+  .loading-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 65vh; gap: 18px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border-color); border-top-color: #e8622c; border-radius: 50%; animation: girar 0.8s linear infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  .progress-track { width: 220px; height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #e8622c; width: 0%; transition: width .25s ease; border-radius: 3px; }
+  .progress-label { font-size: 12px; color: var(--text-subtitle); font-weight: 500; }
+  .progress-label .progress-pct { font-weight: 700; color: var(--text-title); }
+</style>
+</head>
+<body>
+
+<div class="dash-header">
+  <div class="header-top">
+    <div class="header-left">
+      <div class="logo-badge">📊</div>
+      <div class="title-block">
+        <h1>Losses SoC - Forecast</h1>
+        <div class="subtitle">Projeção de Perdas | Loss Rate</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="status-block">
+        <div class="sync-badge" id="sync-badge">
+          <span class="sync-dot"></span>
+          <span>Base de dados sendo atualizada…</span>
+        </div>
+        <div class="status-line">
+          <span class="status-dot"></span>
+          <span id="status-text">Carregando…</span>
+        </div>
+        <div class="tags-line">Losses · Forecast · Targets</div>
+      </div>
+      <div style="position:relative;">
+        <button class="theme-toggle" id="admin-gear-btn" aria-label="Menu administrativo" title="Menu administrativo">
+          <span>⚙️</span>
+        </button>
+        <div id="admin-menu" class="admin-menu">
+          <div class="admin-menu-item" data-fn="executarAdminStartSync">startSync</div>
+          <div class="admin-menu-item" data-fn="executarAdminResetarSincronizacaoTravada">resetarSincronizacaoTravada</div>
+          <div class="admin-menu-item" data-fn="executarAdminForcarSync">forcarSync</div>
+          <div class="admin-menu-item" data-fn="executarAdminVerificarProgressoSync">verificarProgressoSync</div>
+        </div>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Alternar tema claro/escuro">
+        <span id="theme-icon">🌙</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal de logs do painel administrativo -->
+  <div id="admin-modal-overlay" class="admin-modal-overlay">
+    <div class="admin-modal">
+      <div class="admin-modal-header">
+        <span id="admin-modal-titulo">Executando…</span>
+        <button id="admin-modal-fechar" class="admin-modal-fechar">✕</button>
+      </div>
+      <pre id="admin-modal-log" class="admin-modal-log">Carregando…</pre>
+    </div>
+  </div>
+
+  <nav class="header-tabs">
+    <div class="tab active" data-painel="gerencial">📊 Gerencial</div>
+    <div class="tab" data-painel="analitico">🔍 Projeção Analítica</div>
+    <div class="tab" data-painel="deepdive">🔬 Deep Dive</div>
+  </nav>
+</div>
+
+<div class="page-content">
+
+  <div class="filtro-bar">
+    <label for="filtro-estacao">Visualizar:</label>
+    <select id="filtro-estacao">
+      <option value="OVERALL">📦 Overall — Geral SOC's</option>
+    </select>
+  </div>
+
+  <div class="painel active" id="painel-gerencial">
+    <div id="carregamento-geral"></div>
+    <div id="conteudo-gerencial" style="display:none;">
+      <div class="bloco-gerencial" id="bloco-overall"></div>
+      <div class="bloco-gerencial" id="bloco-ranking"></div>
+    </div>
+  </div>
+
+  <div class="painel" id="painel-analitico">
+    <div class="bloco-gerencial" id="bloco-distribuicao-status"></div>
+    <div class="bloco-gerencial" id="bloco-aging"></div>
+  </div>
+
+  <div class="painel" id="painel-deepdive">
+    <div class="bloco-gerencial" id="bloco-deepdive-status"></div>
+    <div class="bloco-gerencial" id="bloco-deepdive-causaraiz"></div>
+  </div>
+
+</div>
+
+<script>
+  let analiticoJaCarregado = false;
+  let deepDiveJaCarregado = false;
+
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      document.querySelectorAll('.painel').forEach(p => p.classList.remove('active'));
+      const painelId = 'painel-' + tab.dataset.painel;
+      document.getElementById(painelId).classList.add('active');
+
+      if (tab.dataset.painel === 'analitico' && !analiticoJaCarregado) {
+        analiticoJaCarregado = true;
+        carregarDistribuicaoStatus();
+        carregarAging();
+      }
+
+      if (tab.dataset.painel === 'deepdive' && !deepDiveJaCarregado) {
+        deepDiveJaCarregado = true;
+        carregarDeepDive();
+        carregarCausaRaiz();
+      }
+    });
+  });
+
+  // Alternância de tema claro/escuro com preferência salva
+  const root = document.documentElement;
+  const toggleBtn = document.getElementById('theme-toggle');
+
+  // ===== Menu administrativo (engrenagem) =====
+  // A senha é só uma barreira simples contra clique acidental - não é
+  // segurança de verdade (qualquer um com acesso ao dashboard e um pouco de
+  // conhecimento técnico consegue rodar essas funções direto pelo console).
+  (function() {
+    const gearBtn = document.getElementById('admin-gear-btn');
+    const menu = document.getElementById('admin-menu');
+    const overlay = document.getElementById('admin-modal-overlay');
+    const modalTitulo = document.getElementById('admin-modal-titulo');
+    const modalLog = document.getElementById('admin-modal-log');
+    const fecharBtn = document.getElementById('admin-modal-fechar');
+
+    let autenticado = false;
+
+    gearBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+
+      if (!autenticado) {
+        const senha = prompt('Senha do menu administrativo:');
+        if (senha === null) return; // cancelou
+
+        google.script.run
+          .withSuccessHandler(function(ok) {
+            if (ok) {
+              autenticado = true;
+              menu.classList.add('aberto');
+            } else {
+              alert('Senha incorreta.');
+            }
+          })
+          .withFailureHandler(function(erro) {
+            console.error('Erro ao verificar senha:', erro);
+            alert('Erro ao verificar senha. Veja o console.');
+          })
+          .verificarSenhaAdmin(senha);
+        return;
+      }
+
+      menu.classList.toggle('aberto');
+    });
+
+    // Fecha o menu clicando fora dele.
+    document.addEventListener('click', function() {
+      menu.classList.remove('aberto');
+    });
+
+    menu.querySelectorAll('.admin-menu-item').forEach(function(item) {
+      item.addEventListener('click', function(e) {
+        e.stopPropagation();
+        menu.classList.remove('aberto');
+
+        const nomeFuncao = item.dataset.fn;
+        modalTitulo.textContent = nomeFuncao + '()';
+        modalLog.textContent = 'Executando…';
+        overlay.classList.add('aberto');
+
+        google.script.run
+          .withSuccessHandler(function(log) {
+            modalLog.textContent = log && log.length > 0 ? log : '(execução concluída, sem logs)';
+          })
+          .withFailureHandler(function(erro) {
+            modalLog.textContent = 'ERRO: ' + (erro && erro.message ? erro.message : erro);
+          })
+          [nomeFuncao]();
+      });
+    });
+
+    fecharBtn.addEventListener('click', function() {
+      overlay.classList.remove('aberto');
+    });
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.classList.remove('aberto');
+    });
+  })();
+
+  const themeIcon = document.getElementById('theme-icon');
+
+  function aplicarTema(tema) {
+    root.setAttribute('data-theme', tema);
+    themeIcon.textContent = tema === 'dark' ? '🌙' : '☀️';
+    localStorage.setItem('dashboard-theme', tema);
+  }
+
+  const temaSalvo = localStorage.getItem('dashboard-theme');
+  const prefereEscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  aplicarTema(temaSalvo || (prefereEscuro ? 'dark' : 'light'));
+
+  toggleBtn.addEventListener('click', () => {
+    const atual = root.getAttribute('data-theme');
+    aplicarTema(atual === 'dark' ? 'light' : 'dark');
+  });
+
+  // Ao abrir o dashboard, verifica imediatamente no servidor se a base
+  // precisa de atualização (startSync do DataBase.gs). Enquanto roda,
+  // mostra um aviso no lugar do status; some/atualiza data quando termina.
+  const statusText = document.getElementById('status-text');
+
+  function formatarAgora() {
+    const agora = new Date();
+    const dd = String(agora.getDate()).padStart(2, '0');
+    const mm = String(agora.getMonth() + 1).padStart(2, '0');
+    const yyyy = agora.getFullYear();
+    const hh = String(agora.getHours()).padStart(2, '0');
+    const min = String(agora.getMinutes()).padStart(2, '0');
+    return 'Online — ' + dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + min;
+  }
+
+  function exibirCorteAtualizacao(grassDatetime) {
+    statusText.textContent = grassDatetime
+      ? ('Online — Atualizado até ' + grassDatetime)
+      : formatarAgora();
+  }
+
+  const syncBadge = document.getElementById('sync-badge');
+  let intervaloPolling = null;
+
+  function mostrarBadgeSincronizacao() {
+    syncBadge.classList.add('visivel');
+  }
+
+  function esconderBadgeSincronizacao() {
+    syncBadge.classList.remove('visivel');
+  }
+
+  // Fica perguntando ao servidor, de tempos em tempos, se a sincronização
+  // (iniciada por este usuário ou por outro) já terminou. Só chamada
+  // enquanto o badge estiver visível.
+  function iniciarPollingSincronizacao() {
+    if (intervaloPolling) return; // já tem um polling rodando, não duplica
+
+    intervaloPolling = setInterval(function() {
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          if (!resultado.emAndamento) {
+            clearInterval(intervaloPolling);
+            intervaloPolling = null;
+            esconderBadgeSincronizacao();
+            exibirCorteAtualizacao(resultado.grassDatetime);
+
+            // Base de dados acabou de ser atualizada - recarrega os dados
+            // exibidos no dashboard pra refletir os números novos, sem
+            // precisar que o usuário dê F5 na página.
+            carregarTudo();
+          }
+        })
+        .withFailureHandler(function(erro) {
+          console.error('Erro ao checar status da sincronização:', erro);
+        })
+        .obterStatusSincronizacao();
+    }, 20000); // checa a cada 20s
+  }
+
+  function verificarAtualizacaoDaBase() {
+    statusText.textContent = 'Verificando atualizações da base…';
+
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (resultado && resultado.status === 'atualizando') {
+          // Mantém o badge visível enquanto a sincronização não terminar
+          // (pode ter sido iniciada por este usuário ou por outro).
+          mostrarBadgeSincronizacao();
+          statusText.textContent = 'Atualizando base de dados…';
+          iniciarPollingSincronizacao();
+          return;
+        }
+
+        let mensagem;
+        switch (resultado && resultado.status) {
+          case 'atualizado':
+            mensagem = 'Base de dados atualizada';
+            break;
+          case 'erro':
+            mensagem = 'Falha ao atualizar a base — ver logs';
+            break;
+          default:
+            mensagem = 'Base de dados já atualizada';
+        }
+
+        statusText.textContent = mensagem;
+        setTimeout(function() {
+          exibirCorteAtualizacao(resultado && resultado.grassDatetime);
+        }, 4000);
+      })
+      .withFailureHandler(function(erro) {
+        console.error('Erro ao verificar atualização da base:', erro);
+        statusText.textContent = 'Erro ao verificar atualização';
+        setTimeout(function() {
+          statusText.textContent = formatarAgora();
+        }, 4000);
+      })
+      .verificarAtualizacaoAoAbrir();
+  }
+
+  verificarAtualizacaoDaBase();
+
+  // ===== Painel Gerencial =====
+  const NOMES_MES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+  function formatarPercentual(valor) {
+    if (valor === null || valor === undefined || isNaN(valor)) return '—';
+    return (valor * 100).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + '%';
+  }
+
+  function formatarInteiro(valor) {
+    if (valor === null || valor === undefined || isNaN(valor)) return '—';
+    return Math.round(valor).toLocaleString('pt-BR');
+  }
+
+  // Retorna span com seta + variação percentual entre dois valores.
+  // inverterCores = true quando "menor é melhor" (losses, forecast, loss rate).
+  function montarComparativo(atual, anterior, inverterCores) {
+    if (atual === null || anterior === null || anterior === 0 || isNaN(atual) || isNaN(anterior)) {
+      return '<span class="kpi-sub neutro">sem dado do mês anterior</span>';
+    }
+    const variacao = (atual - anterior) / Math.abs(anterior);
+    const subiu = variacao > 0;
+    let classe = 'neutro';
+    if (variacao !== 0) {
+      const foiBom = inverterCores ? !subiu : subiu;
+      classe = foiBom ? 'positivo' : 'negativo';
+    }
+    const seta = subiu ? '▲' : (variacao < 0 ? '▼' : '—');
+    return '<span class="kpi-sub ' + classe + '">' + seta + ' ' +
+      Math.abs(variacao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) +
+      '% vs mês anterior</span>';
+  }
+
+  // Compara duas taxas em pontos percentuais (diferença absoluta), colorindo
+  // verde quando "atual" é menor que "referencia" e vermelho quando é maior -
+  // Loss Rate mais alto é sempre pior, então "menor" é sempre o lado bom aqui.
+  function montarComparativoPPColorido(atual, referencia, rotulo) {
+    if (atual === null || atual === undefined || referencia === null || referencia === undefined || isNaN(atual) || isNaN(referencia)) {
+      return '<span class="kpi-sub neutro">sem dado - ' + rotulo + '</span>';
+    }
+    const diffPP = (atual - referencia) * 100;
+    const classe = diffPP <= 0 ? 'positivo' : 'negativo';
+    const seta = diffPP > 0 ? '▲' : (diffPP < 0 ? '▼' : '—');
+    return '<span class="kpi-sub ' + classe + '">' + seta + ' ' +
+      Math.abs(diffPP).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) +
+      ' pp ' + rotulo + '</span>';
+  }
+
+  // Comparação em pontos percentuais (diferença absoluta, não variação
+  // relativa) - faz mais sentido pra comparar duas taxas/metas entre si.
+  // Neutro (sem verde/vermelho) porque não há um "lado bom" óbvio pra uma
+  // meta subir ou descer - é só informativo.
+  function montarComparativoPP(atual, anterior) {
+    if (atual === null || atual === undefined || anterior === null || anterior === undefined || isNaN(atual) || isNaN(anterior)) {
+      return '<span class="kpi-sub neutro">sem dado do mês anterior</span>';
+    }
+    const diffPP = (atual - anterior) * 100;
+    const seta = diffPP > 0 ? '▲' : (diffPP < 0 ? '▼' : '—');
+    return '<span class="kpi-sub neutro">' + seta + ' ' +
+      Math.abs(diffPP).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) +
+      ' pp vs mês anterior</span>';
+  }
+  function ultimosDoisMeses(mensal) {
+    if (!mensal || mensal.length === 0) return { anterior: null, atual: null };
+    if (mensal.length === 1) return { anterior: null, atual: mensal[0] };
+    return { anterior: mensal[mensal.length - 2], atual: mensal[mensal.length - 1] };
+  }
+
+  // Soma só as PRIMEIRAS N semanas do mês anterior, onde N é quantas semanas
+  // o mês atual já tem fechadas/em andamento - assim a comparação é sempre
+  // "mesmo período decorrido", não o mês anterior inteiro (que distorceria a
+  // variação enquanto o mês atual ainda está em andamento).
+  function periodoEquivalenteAnterior(dadosBloco, atual, anterior) {
+    if (!atual || !anterior) return null;
+
+    const semanasAtual = dadosBloco.semanal.filter(function(s) { return s.mes === atual.mes; });
+    const nSemanas = semanasAtual.length;
+    if (nSemanas === 0) return null;
+
+    const semanasAnterior = dadosBloco.semanal
+      .filter(function(s) { return s.mes === anterior.mes; })
+      .sort(function(a, b) { return a.semana - b.semana; })
+      .slice(0, nSemanas);
+
+    if (semanasAnterior.length === 0) return null;
+
+    const soma = { volume: 0, losses: 0, forecast_losses: 0 };
+    semanasAnterior.forEach(function(s) {
+      soma.volume += s.volume || 0;
+      soma.losses += s.losses || 0;
+      soma.forecast_losses += s.forecast_losses || 0;
+    });
+    soma.total_losses = soma.losses + soma.forecast_losses;
+    soma.total_rate = soma.volume > 0 ? soma.total_losses / soma.volume : null;
+
+    return soma;
+  }
+
+  // Monta a sequência de barras: mês, semanas desse mês, próximo mês, suas semanas...
+  function montarSequenciaGrafico(dadosBloco) {
+    const barras = [];
+    dadosBloco.mensal.forEach(function(m) {
+      barras.push({
+        label: NOMES_MES[m.mes], tipoMes: true,
+        loss_rate: m.loss_rate || 0, forecast_rate: m.forecast_rate || 0, target_rate: m.target_rate
+      });
+
+      dadosBloco.semanal
+        .filter(function(s) { return s.mes === m.mes; })
+        .sort(function(a, b) { return a.semana - b.semana; })
+        .forEach(function(s) {
+          barras.push({
+            label: 'S' + s.semana, tipoMes: false,
+            loss_rate: s.loss_rate || 0, forecast_rate: s.forecast_rate || 0, target_rate: s.target_rate
+          });
+        });
+    });
+    return barras;
+  }
+
+  // Gera o SVG do gráfico de Loss Rate: colunas empilhadas (realizado + forecast) + linha de meta
+  function construirGraficoSVG(dadosBloco) {
+    const barras = montarSequenciaGrafico(dadosBloco);
+    if (barras.length === 0) return '<div class="estado-vazio">Sem dados para o gráfico.</div>';
+
+    const altura = 260;
+    const margemEsq = 55, margemDir = 16, margemTopo = 34, margemBaixo = 34;
+    const larguraBarraBase = 64;
+    const larguraViewBox = margemEsq + margemDir + barras.length * larguraBarraBase;
+    const larguraUtil = larguraViewBox - margemEsq - margemDir;
+    const alturaUtil = altura - margemTopo - margemBaixo;
+    const passo = larguraUtil / barras.length;
+    const larguraBarra = passo * 0.5;
+
+    const valores = barras.map(function(b) { return (b.loss_rate + b.forecast_rate); })
+      .concat(barras.map(function(b) { return b.target_rate || 0; }));
+    const maxValor = Math.max.apply(null, valores.concat([0.00001])) * 1.3;
+
+    function escalaY(v) { return margemTopo + alturaUtil - (v / maxValor) * alturaUtil; }
+    function escalaX(i) { return margemEsq + passo * i + (passo - larguraBarra) / 2; }
+    function pct(v) { return v === null || v === undefined ? '' : (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + '%'; }
+
+    // width="100%" + preserveAspectRatio="none" faz o gráfico esticar pra
+    // ocupar toda a largura disponível do card, não importa quantas barras
+    // tenha - em vez de ficar com largura fixa em pixels e scroll horizontal.
+    let svg = '<svg viewBox="0 0 ' + larguraViewBox + ' ' + altura + '" width="100%" height="' + altura + '" ' +
+      'preserveAspectRatio="none" style="display:block" xmlns="http://www.w3.org/2000/svg">';
+
+    // Faixa de destaque atrás das colunas de MÊS (cobre a "fatia" inteira do
+    // eixo X reservada pra aquela barra), pra diferenciar visualmente das
+    // colunas de semana - desenhada primeiro, por trás de tudo.
+    barras.forEach(function(b, i) {
+      if (b.tipoMes) {
+        const xZona = margemEsq + passo * i;
+        svg += '<rect x="' + xZona + '" y="' + margemTopo + '" width="' + passo + '" height="' + alturaUtil +
+          '" fill="var(--chart-mes-highlight)"/>';
+      }
+    });
+
+    // Linhas de grade horizontais (0%, meio, topo)
+    [0, 0.5, 1].forEach(function(frac) {
+      const v = maxValor * frac;
+      const y = escalaY(v);
+      svg += '<line x1="' + margemEsq + '" y1="' + y + '" x2="' + (larguraViewBox - margemDir) + '" y2="' + y +
+        '" stroke="var(--border-color)" stroke-width="1"/>';
+      svg += '<text x="' + (margemEsq - 8) + '" y="' + (y + 3) + '" font-size="10" text-anchor="end" fill="var(--text-subtitle)">' +
+        (v * 100).toFixed(3) + '%</text>';
+    });
+
+    // Separadores verticais antes de cada bloco de mês (exceto o primeiro)
+    barras.forEach(function(b, i) {
+      if (b.tipoMes && i > 0) {
+        const xSep = margemEsq + passo * i;
+        svg += '<line x1="' + xSep + '" y1="' + margemTopo + '" x2="' + xSep + '" y2="' + (altura - margemBaixo) +
+          '" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="2,3"/>';
+      }
+    });
+
+    // Linha de meta (target), tracejada e fina - desenhada ANTES das barras
+    // pra ficar por baixo delas (e dos rótulos de valor), não atrapalhando a leitura.
+    const pontosTarget = barras
+      .map(function(b, i) { return { x: escalaX(i) + larguraBarra / 2, y: escalaY(b.target_rate || 0), valido: b.target_rate !== null && b.target_rate !== undefined }; });
+
+    let pathAtual = [];
+    const segmentos = [];
+    pontosTarget.forEach(function(p) {
+      if (p.valido) {
+        pathAtual.push(p.x + ',' + p.y);
+      } else if (pathAtual.length > 0) {
+        segmentos.push(pathAtual);
+        pathAtual = [];
+      }
+    });
+    if (pathAtual.length > 0) segmentos.push(pathAtual);
+
+    segmentos.forEach(function(seg) {
+      if (seg.length < 2) return;
+      svg += '<polyline points="' + seg.join(' ') + '" fill="none" stroke="var(--chart-target)" stroke-width="1" stroke-dasharray="4,4" opacity="0.7"/>';
+    });
+
+    barras.forEach(function(b, i) {
+      if (b.target_rate === null || b.target_rate === undefined) return;
+      const x = escalaX(i) + larguraBarra / 2;
+      const y = escalaY(b.target_rate);
+      svg += '<circle cx="' + x + '" cy="' + y + '" r="2" fill="var(--chart-target)" opacity="0.7"/>';
+    });
+
+    // Barras empilhadas: segmento realizado (base) + segmento forecast (topo)
+    barras.forEach(function(b, i) {
+      const x = escalaX(i);
+      const yTopoRealizado = escalaY(b.loss_rate);
+      const yBase = escalaY(0);
+      const yTopoTotal = escalaY(b.loss_rate + b.forecast_rate);
+      const contorno = b.tipoMes ? ' stroke="var(--text-title)" stroke-width="1"' : '';
+
+      svg += '<rect x="' + x + '" y="' + yTopoRealizado + '" width="' + larguraBarra + '" height="' + (yBase - yTopoRealizado) +
+        '" fill="var(--chart-realizado)" rx="2"' + contorno + '/>';
+      svg += '<rect x="' + x + '" y="' + yTopoTotal + '" width="' + larguraBarra + '" height="' + (yTopoRealizado - yTopoTotal) +
+        '" fill="var(--chart-forecast)" rx="2"' + contorno + '/>';
+
+      // Rótulo do valor total no topo da barra - verde se dentro do target,
+      // vermelho se acima; neutro quando não há target pra comparar.
+      const rateTotalBarra = b.loss_rate + b.forecast_rate;
+      let corRotulo = 'var(--text-title)';
+      if (b.target_rate !== null && b.target_rate !== undefined) {
+        corRotulo = rateTotalBarra <= b.target_rate ? '#3fa855' : '#d9483f';
+      }
+      svg += '<text x="' + (x + larguraBarra / 2) + '" y="' + (yTopoTotal - 6) + '" font-size="10" font-weight="700" ' +
+        'text-anchor="middle" fill="' + corRotulo + '">' + pct(rateTotalBarra) + '</text>';
+
+      // Rótulo do eixo X
+      svg += '<text x="' + (x + larguraBarra / 2) + '" y="' + (altura - margemBaixo + 16) + '" font-size="' +
+        (b.tipoMes ? '11.5' : '10.5') + '" font-weight="' + (b.tipoMes ? '700' : '500') + '" text-anchor="middle" ' +
+        'fill="' + (b.tipoMes ? 'var(--text-title)' : 'var(--text-subtitle)') + '">' + b.label + '</text>';
+    });
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  function renderizarBloco(container, titulo, dadosBloco) {
+    if (!dadosBloco || !dadosBloco.semanal || dadosBloco.semanal.length === 0) {
+      container.innerHTML =
+        '<div class="bloco-titulo"><h2>' + titulo + '</h2></div>' +
+        '<div class="tabela-card"><div class="estado-vazio">Nenhum dado encontrado para o período.</div></div>';
+      return;
+    }
+
+    const graficoHtml =
+      '<div class="grafico-card">' +
+        '<div class="grafico-legenda">' +
+          '<span><span class="legenda-cor" style="background:var(--chart-realizado)"></span>Loss Rate realizado</span>' +
+          '<span><span class="legenda-cor" style="background:var(--chart-forecast)"></span>Forecast Rate</span>' +
+          '<span><span class="legenda-linha"></span>Target</span>' +
+        '</div>' +
+        construirGraficoSVG(dadosBloco) +
+      '</div>';
+
+    const { anterior, atual } = ultimosDoisMeses(dadosBloco.mensal);
+    const nomeMesAtual = atual ? NOMES_MES[atual.mes] : '';
+    const anteriorEq = periodoEquivalenteAnterior(dadosBloco, atual, anterior);
+
+    const totalLossesAtual = (atual.losses || 0) + (atual.forecast_losses || 0);
+    const totalRateAtual = (atual.loss_rate || 0) + (atual.forecast_rate || 0);
+
+    const kpiHtml =
+      '<div class="kpi-row">' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Volume — ' + nomeMesAtual + '</div>' +
+          '<div class="kpi-value">' + formatarInteiro(atual.volume) + '</div>' +
+          montarComparativo(atual.volume, anteriorEq && anteriorEq.volume, false) +
+        '</div>' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Losses Totais (Realizado + Forecast) — ' + nomeMesAtual + '</div>' +
+          '<div class="kpi-value">' + formatarInteiro(totalLossesAtual) + '</div>' +
+          montarComparativo(totalLossesAtual, anteriorEq && anteriorEq.total_losses, true) +
+        '</div>' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Forecast Loss Rate</div>' +
+          '<div class="kpi-value">' + formatarPercentual(totalRateAtual) + '</div>' +
+          '<div class="kpi-sub-row">' +
+            montarComparativoPPColorido(totalRateAtual, anterior && ((anterior.loss_rate || 0) + (anterior.forecast_rate || 0)), 'vs mês anterior') +
+            montarComparativoPPColorido(totalRateAtual, atual.target_rate, 'vs target') +
+          '</div>' +
+        '</div>' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Target — ' + nomeMesAtual + '</div>' +
+          '<div class="kpi-value">' + formatarPercentual(atual.target_rate) + '</div>' +
+          montarComparativoPP(atual.target_rate, anterior && anterior.target_rate) +
+        '</div>' +
+      '</div>';
+
+    // Monta a célula de Rate: valor total (losses+forecast / volume) + seta
+    // indicando se está dentro (verde/▼) ou fora (vermelho/▲) do target.
+    function montarCelulaRate(rateTotal, targetRate) {
+      const textoRate = formatarPercentual(rateTotal);
+      if (targetRate === null || targetRate === undefined || isNaN(targetRate)) {
+        return textoRate;
+      }
+      const dentro = rateTotal <= targetRate;
+      const seta = dentro ? '▼' : '▲';
+      const cor = dentro ? '#3fa855' : '#d9483f';
+      return textoRate + ' <span style="color:' + cor + '; font-weight:700;">' + seta + '</span>';
+    }
+
+    // Variação do Rate desta semana vs a semana imediatamente anterior da
+    // série (em pp) - vermelho/subiu quando piorou, verde/desceu quando
+    // melhorou. Na primeira semana da série não há anterior pra comparar.
+    function montarCelulaVarSemanal(rateAtual, rateAnterior) {
+      if (rateAnterior === null || rateAnterior === undefined) {
+        return '<span class="rank-celula-vazia">—</span>';
+      }
+      const diffPP = (rateAtual - rateAnterior) * 100;
+      const cor = diffPP <= 0 ? '#3fa855' : '#d9483f';
+      const seta = diffPP > 0 ? '▲' : (diffPP < 0 ? '▼' : '—');
+      const texto = Math.abs(diffPP).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      return '<span style="color:' + cor + '; font-weight:600;">' + seta + ' ' + texto + ' pp</span>';
+    }
+
+    // Quando uma semana cruza a virada de mês (ex: semana 27 começa em jun e
+    // termina em jul), o back-end devolve 2 linhas pra ela - uma por mês.
+    // Aqui juntamos essas linhas numa só, somando os números e mostrando o
+    // rótulo do mês como "Jun + Jul". O target vira uma média ponderada
+    // pelo volume de cada "pedaço" da semana.
+    function mesclarSemanasDivididas(semanalOriginal) {
+      const porSemana = {};
+      const ordem = [];
+
+      semanalOriginal.forEach(function(s) {
+        if (!porSemana[s.semana]) {
+          porSemana[s.semana] = {
+            semana: s.semana, meses: [], volume: 0, losses: 0, forecast_losses: 0,
+            targetPorMes: {}
+          };
+          ordem.push(s.semana);
+        }
+        const b = porSemana[s.semana];
+        if (b.meses.indexOf(s.mes) === -1) b.meses.push(s.mes);
+        b.volume += s.volume || 0;
+        b.losses += s.losses || 0;
+        b.forecast_losses += s.forecast_losses || 0;
+        if (s.target_rate !== null && s.target_rate !== undefined) {
+          b.targetPorMes[s.mes] = s.target_rate;
+        }
+      });
+
+      return ordem.map(function(semana) {
+        const b = porSemana[semana];
+        const mesesOrdenados = b.meses.slice().sort(function(x, y) { return x - y; });
+        const mesInicio = mesesOrdenados[0]; // mês em que a semana começa
+        return {
+          semana: semana,
+          mes: mesesOrdenados[mesesOrdenados.length - 1], // mês mais recente - usado só pra destacar linha do mês atual
+          mesLabel: mesesOrdenados.map(function(m) { return NOMES_MES[m]; }).join(' + '),
+          volume: b.volume,
+          losses: b.losses,
+          forecast_losses: b.forecast_losses,
+          loss_rate: b.volume > 0 ? b.losses / b.volume : 0,
+          forecast_rate: b.volume > 0 ? b.forecast_losses / b.volume : 0,
+          // Target do mês em que a semana COMEÇA, não uma média entre os meses.
+          target_rate: b.targetPorMes[mesInicio] !== undefined ? b.targetPorMes[mesInicio] : null
+        };
+      });
+    }
+
+    const semanalMesclado = mesclarSemanasDivididas(dadosBloco.semanal);
+
+    const linhasSemanais = semanalMesclado.map(function(s, i) {
+      const classeLinha = (atual && s.mes === atual.mes) ? ' class="linha-mes-atual"' : '';
+      const rateTotal = (s.loss_rate || 0) + (s.forecast_rate || 0);
+
+      let varSemanal;
+      if (i === 0) {
+        varSemanal = '<span class="rank-celula-vazia">—</span>';
+      } else {
+        const sAnterior = semanalMesclado[i - 1];
+        const rateAnterior = (sAnterior.loss_rate || 0) + (sAnterior.forecast_rate || 0);
+        varSemanal = montarCelulaVarSemanal(rateTotal, rateAnterior);
+      }
+
+      return '<tr' + classeLinha + '>' +
+        '<td>' + s.mesLabel + '</td>' +
+        '<td>Sem ' + s.semana + '</td>' +
+        '<td>' + formatarInteiro(s.volume) + '</td>' +
+        '<td>' + formatarInteiro(s.losses) + '</td>' +
+        '<td>' + formatarInteiro(s.forecast_losses) + '</td>' +
+        '<td>' + formatarPercentual(s.loss_rate) + '</td>' +
+        '<td>' + montarCelulaRate(rateTotal, s.target_rate) + '</td>' +
+        '<td>' + formatarPercentual(s.target_rate) + '</td>' +
+        '<td>' + varSemanal + '</td>' +
+        '</tr>';
+    }).join('');
+
+    const tabelaHtml =
+      '<div class="tabela-card">' +
+        '<table class="tabela-estacoes">' +
+          '<thead><tr>' +
+            '<th>Mês</th><th>Semana</th><th>Volume</th><th>Losses</th>' +
+            '<th>Forecast</th><th>Rate Atual</th><th>Rate Projetado</th><th>Target</th><th>Var. Semanal</th>' +
+          '</tr></thead>' +
+          '<tbody>' + linhasSemanais + '</tbody>' +
+        '</table>' +
+      '</div>';
+
+    container.innerHTML =
+      '<div class="bloco-titulo"><h2>' + titulo + '</h2><span>Semana a semana + fechamento mensal</span></div>' +
+      graficoHtml + kpiHtml + tabelaHtml;
+  }
+
+  // ===== Spinner + barra de progresso enquanto os dados carregam =====
+  // O Apps Script não expõe o progresso real de uma query no BigQuery, então
+  // simulamos: a barra avança rápido no início e desacelera perto de 90%,
+  // só completando de verdade (100%) quando os dados realmente chegam.
+  function iniciarCarregamento(container) {
+    container.innerHTML =
+      '<div class="loading-wrap">' +
+        '<div class="spinner"></div>' +
+        '<div class="progress-track"><div class="progress-fill"></div></div>' +
+        '<div class="progress-label">Carregando dados… <span class="progress-pct">0%</span></div>' +
+      '</div>';
+
+    const fill = container.querySelector('.progress-fill');
+    const rotulo = container.querySelector('.progress-pct');
+    let progresso = 0;
+
+    const intervalo = setInterval(function() {
+      const incremento = (90 - progresso) * 0.08 + 0.4;
+      progresso = Math.min(progresso + incremento, 90);
+      fill.style.width = progresso + '%';
+      rotulo.textContent = Math.round(progresso) + '%';
+    }, 200);
+
+    return {
+      finalizar: function() {
+        clearInterval(intervalo);
+        // Salta pra 100% rapidinho antes do conteúdo real substituir o HTML,
+        // só pra dar a sensação de conclusão em vez de sumir abruptamente em 90%.
+        fill.style.width = '100%';
+        rotulo.textContent = '100%';
+      }
+    };
+  }
+
+  function carregarPainelGerencial() {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const container = document.getElementById('bloco-overall');
+
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        const titulo = montarTituloBloco(resultado.filtro);
+        renderizarBloco(container, titulo, resultado.dados);
+        finalizarUmaPendencia();
+      })
+      .withFailureHandler(function(erro) {
+        console.error('Erro ao carregar painel gerencial:', erro);
+        container.innerHTML =
+          '<div class="tabela-card"><div class="estado-vazio">Erro ao carregar dados. Veja o console.</div></div>';
+        finalizarUmaPendencia();
+      })
+      .obterDadosGerencial(filtro);
+  }
+
+  function montarTituloBloco(filtro) {
+    switch (filtro) {
+      case 'OVERALL': return "📦 Overall — Geral SOC's";
+      case 'GROUP:SORTER': return '🔗 Sorter — SOC-SP8 · SOC-RJ2 · SOC-SP2';
+      case 'GROUP:REGI': return '🔗 Reg I — Todos os SOCs de SP';
+      case 'GROUP:REGII': return '🔗 Reg II — Todos os SOCs fora de SP';
+      default: return '🏢 SOC-' + filtro;
+    }
+  }
+
+  // Popula o seletor agrupado (Overall + optgroups Sorter/Reg I/Reg II),
+  // cada grupo com uma opção "consolidada" no topo + os SOCs individuais
+  // daquele grupo em seguida. Ao trocar a seleção, recarrega o painel filtrado.
+  function popularFiltroEstacoes() {
+    const select = document.getElementById('filtro-estacao');
+
+    function criarOpcao(valor, texto) {
+      const opcao = document.createElement('option');
+      opcao.value = valor;
+      opcao.textContent = texto;
+      return opcao;
+    }
+
+    function criarGrupo(label, valorConsolidado, textoConsolidado, codigos) {
+      const grupo = document.createElement('optgroup');
+      grupo.label = label;
+      grupo.appendChild(criarOpcao(valorConsolidado, textoConsolidado));
+      codigos.forEach(function(codigo) {
+        grupo.appendChild(criarOpcao(codigo, 'SOC-' + codigo));
+      });
+      return grupo;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(grupos) {
+        select.appendChild(criarGrupo('Sorter', 'GROUP:SORTER', '🔗 Sorter (Consolidado)', grupos.sorter || []));
+        select.appendChild(criarGrupo('Reg I — SP', 'GROUP:REGI', '🔗 Reg I (Consolidado)', grupos.regI || []));
+        select.appendChild(criarGrupo('Reg II — Fora de SP', 'GROUP:REGII', '🔗 Reg II (Consolidado)', grupos.regII || []));
+      })
+      .withFailureHandler(function(erro) {
+        console.error('Erro ao carregar lista de SOCs agrupada:', erro);
+      })
+      .obterListaEstacoesAgrupadas();
+
+    select.addEventListener('change', function() {
+      carregarTudo();
+      if (analiticoJaCarregado) {
+        carregarDistribuicaoStatus();
+        carregarAging();
+      }
+      if (deepDiveJaCarregado) {
+        carregarDeepDive();
+        carregarCausaRaiz();
+      }
+    });
+  }
+
+  // ===== Orquestrador: carrega painel + ranking em paralelo, com UM único
+  // spinner/barra de progresso compartilhado, que só some quando as DUAS
+  // partes terminarem (sucesso ou erro, tanto faz - cada uma resolve sua
+  // própria pendência).
+  let pendenciasCarregamento = 0;
+  let controladorCarregamentoGeral = null;
+
+  function carregarTudo() {
+    const containerSpinner = document.getElementById('carregamento-geral');
+    const containerConteudo = document.getElementById('conteudo-gerencial');
+
+    containerConteudo.style.display = 'none';
+    pendenciasCarregamento = 2; // painel + ranking
+    controladorCarregamentoGeral = iniciarCarregamento(containerSpinner);
+
+    carregarPainelGerencial();
+    carregarRanking();
+  }
+
+  function finalizarUmaPendencia() {
+    pendenciasCarregamento--;
+    if (pendenciasCarregamento > 0) return;
+
+    controladorCarregamentoGeral.finalizar();
+    setTimeout(function() {
+      document.getElementById('carregamento-geral').innerHTML = '';
+      document.getElementById('conteudo-gerencial').style.display = '';
+    }, 200);
+  }
+
+  popularFiltroEstacoes();
+  carregarTudo();
+
+  // ===== Ranking de SOCs (pior para melhor) =====
+  function renderizarRanking(container, dados) {
+    if (!dados || !dados.socs || dados.socs.length === 0) {
+      container.innerHTML =
+        '<div class="bloco-titulo"><h2>🏆 Ranking de SOCs</h2></div>' +
+        '<div class="tabela-card"><div class="estado-vazio">Nenhum dado encontrado para esse filtro.</div></div>';
+      return;
+    }
+
+    const nomeMesAnterior = NOMES_MES[dados.mesAnterior];
+    const nomeMesAtual = NOMES_MES[dados.mesAtual];
+
+    // Célula colorida em pp: verde quando <= 0 (dentro/abaixo do target),
+    // vermelho quando > 0 (acima do target).
+    function celulaVariacaoPP(valor) {
+      if (valor === null || valor === undefined || isNaN(valor)) return '<td class="rank-celula-vazia">—</td>';
+      const cor = valor <= 0 ? '#3fa855' : '#d9483f';
+      const seta = valor <= 0 ? '▼' : '▲';
+      const texto = Math.abs(valor).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      return '<td style="color:' + cor + '; font-weight:600;">' + seta + ' ' + texto + ' pp</td>';
+    }
+
+    function celulaPercentual(valor) {
+      if (valor === null || valor === undefined) return '<td class="rank-celula-vazia">—</td>';
+      return '<td>' + formatarPercentual(valor) + '</td>';
+    }
+
+    // Mini linha de tendência entre o Loss Rate do mês anterior e do mês
+    // atual: vermelha e subindo quando o rate aumentou, verde e descendo
+    // quando reduziu.
+    function celulaMiniTendencia(anterior, atual) {
+      if (anterior === null || anterior === undefined || atual === null || atual === undefined) {
+        return '<td class="rank-celula-vazia">—</td>';
+      }
+
+      const cor = atual > anterior ? '#d9483f' : (atual < anterior ? '#3fa855' : 'var(--text-subtitle)');
+      const maxV = Math.max(anterior, atual);
+      const minV = Math.min(anterior, atual);
+      const range = (maxV - minV) || maxV || 1;
+
+      function escalaY(v) {
+        return maxV === minV ? 12 : (20 - ((v - minV) / range) * 16);
+      }
+
+      const y1 = escalaY(anterior);
+      const y2 = escalaY(atual);
+
+      const svg = '<svg width="40" height="24" viewBox="0 0 40 24" xmlns="http://www.w3.org/2000/svg">' +
+        '<line x1="4" y1="' + y1 + '" x2="36" y2="' + y2 + '" stroke="' + cor + '" stroke-width="2" stroke-linecap="round"/>' +
+        '<circle cx="4" cy="' + y1 + '" r="2.5" fill="' + cor + '"/>' +
+        '<circle cx="36" cy="' + y2 + '" r="2.5" fill="' + cor + '"/>' +
+        '</svg>';
+
+      return '<td>' + svg + '</td>';
+    }
+
+    function celulaInteiro(valor) {
+      if (valor === null || valor === undefined) return '<td class="rank-celula-vazia">—</td>';
+      return '<td>' + formatarInteiro(valor) + '</td>';
+    }
+
+    const linhas = dados.socs.map(function(soc, i) {
+      const classeDestaque = (dados.destaque && soc.station_code === dados.destaque) ? ' class="linha-destaque"' : '';
+
+      return '<tr' + classeDestaque + '>' +
+        '<td><span class="rank-badge">' + (i + 1) + '</span></td>' +
+        '<td>SOC-' + soc.station_code +
+          (soc.semTarget ? ' <span style="color:var(--text-subtitle); font-weight:400; font-size:11px;">(sem meta)</span>' : '') +
+        '</td>' +
+        celulaPercentual(soc.rateAnterior) +
+        celulaMiniTendencia(soc.rateAnterior, soc.rateAtual) +
+        celulaPercentual(soc.rateAtual) +
+        celulaPercentual(soc.targetAtual) +
+        celulaVariacaoPP(soc.variacaoPP) +
+        celulaInteiro(soc.totalPerdasAtual) +
+        celulaInteiro(soc.tetoPerdas) +
+        '</tr>';
+    }).join('');
+
+    container.innerHTML =
+      '<div class="bloco-titulo"><h2>🏆 Ranking de SOCs</h2>' +
+      '<span>Pior → melhor, com base na variação (Rate − Target) do mês atual</span></div>' +
+      '<div class="tabela-card">' +
+        '<table class="tabela-estacoes tabela-ranking">' +
+          '<thead><tr>' +
+            '<th>#</th><th>SOC</th>' +
+            '<th>Loss Rate ' + nomeMesAnterior + '</th>' +
+            '<th>Tendência</th>' +
+            '<th>Loss Rate ' + nomeMesAtual + '</th>' +
+            '<th>Target</th>' +
+            '<th>Variação vs Target</th>' +
+            '<th>Perdas + Forecast (' + nomeMesAtual + ')</th>' +
+            '<th>Teto de Perdas</th>' +
+          '</tr></thead>' +
+          '<tbody>' + linhas + '</tbody>' +
+        '</table>' +
+      '</div>';
+  }
+
+  function carregarRanking() {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const container = document.getElementById('bloco-ranking');
+
+    google.script.run
+      .withSuccessHandler(function(dados) {
+        renderizarRanking(container, dados);
+        finalizarUmaPendencia();
+      })
+      .withFailureHandler(function(erro) {
+        console.error('Erro ao carregar ranking de SOCs:', erro);
+        container.innerHTML =
+          '<div class="tabela-card"><div class="estado-vazio">Erro ao carregar ranking. Veja o console.</div></div>';
+        finalizarUmaPendencia();
+      })
+      .obterRankingSOCs(filtro);
+  }
+
+  // ===== Aba Analítico SoC: distribuição por status =====
+  // ===== Cards de distribuição por status - Projeção Analítica =====
+  // Independente da versão usada no Deep Dive: mesmo que pareçam iguais
+  // hoje, cada aba tem sua própria cópia da lógica de montagem, pra evitar
+  // que um ajuste numa aba afete a outra sem querer.
+  function renderizarDistribuicaoStatus(container, dados) {
+    if (!dados || !dados.linhas || dados.linhas.length === 0) {
+      container.innerHTML =
+        '<div class="bloco-titulo"><h2>🔮 Losses Forecast</h2></div>' +
+        '<div class="tabela-card"><div class="estado-vazio">Nenhum dado encontrado.</div></div>';
+      return;
+    }
+
+    const filtroAtivo = document.getElementById('filtro-estacao');
+    const rotuloFiltro = filtroAtivo ? montarTituloBloco(filtroAtivo.value) : '';
+
+    const linhaHtml =
+      '<div class="kpi-row">' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Total de Perdas Projetadas</div>' +
+          '<div class="kpi-value">' + formatarInteiro(dados.total) + '</div>' +
+          '<div class="kpi-bar-wrap"><div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:100%; background:var(--text-subtitle);"></div></div><span class="kpi-sub neutro">&nbsp;</span></div>' +
+        '</div>' +
+        '<div class="kpi-arrow">➜</div>' +
+        '<div id="observacao-recuperacao" style="flex:3; min-width:320px;"></div>' +
+      '</div>' +
+      '<div id="observacao-recuperacao-tabela"></div>';
+
+    container.innerHTML =
+      '<div class="bloco-titulo"><h2>🔮 Losses Forecast</h2>' +
+      '<span>' + rotuloFiltro + ' · total: ' + formatarInteiro(dados.total) + '</span></div>' +
+      linhaHtml;
+  }
+
+  // ===== Aba Deep Dive: réplica dos cards de distribuição por status =====
+  // Renderização do Deep Dive - cópia própria, independente da Projeção
+  // Analítica (ver comentário lá em cima sobre não compartilhar lógica
+  // entre abas pra evitar conflitos de dados/regra entre análises distintas).
+  function renderizarDeepDive(container, dados) {
+    if (!dados || !dados.linhas || dados.linhas.length === 0) {
+      container.innerHTML =
+        '<div class="bloco-titulo"><h2>🔬 Deep Dive — Distribuição por Status</h2></div>' +
+        '<div class="tabela-card"><div class="estado-vazio">Nenhum dado encontrado.</div></div>';
+      return;
+    }
+
+    const porMacro = {};
+    dados.linhas.forEach(function(l) {
+      porMacro[l.macro_status] = (porMacro[l.macro_status] || 0) + l.qtd_remessas;
+    });
+    const macrosOrdenados = Object.keys(porMacro).sort(function(a, b) { return porMacro[b] - porMacro[a]; });
+
+    const CORES_MACRO = ['#e8622c', '#4c7fd9', '#3fa855', '#a855c7', '#c78a2c'];
+
+    const kpiHtml =
+      '<div class="kpi-row">' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Total de Perdas Projetadas</div>' +
+          '<div class="kpi-value">' + formatarInteiro(dados.total) + '</div>' +
+          '<div class="kpi-bar-wrap"><div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:100%; background:var(--text-subtitle);"></div></div><span class="kpi-sub neutro">&nbsp;</span></div>' +
+        '</div>' +
+        '<div class="kpi-arrow">➜</div>' +
+        macrosOrdenados.map(function(macro, i) {
+          const qtd = porMacro[macro];
+          const percentualNum = dados.total > 0 ? (qtd / dados.total * 100) : 0;
+          const pct = percentualNum.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+          const critico = i === 0;
+          const cor = CORES_MACRO[i % CORES_MACRO.length];
+
+          return '<div class="kpi-card' + (critico ? ' kpi-card-critico' : '') + '">' +
+            (critico ? '<span class="kpi-badge-critico">MAIS CRÍTICO</span>' : '') +
+            '<div class="kpi-label">' + macro + '</div>' +
+            '<div class="kpi-value">' + formatarInteiro(qtd) + '</div>' +
+            '<div class="kpi-bar-wrap">' +
+              '<div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:' + percentualNum.toFixed(1) + '%; background:' + cor + ';"></div></div>' +
+              '<span class="kpi-sub neutro">' + pct + '% do total</span>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+
+    const filtroAtivo = document.getElementById('filtro-estacao');
+    const rotuloFiltro = filtroAtivo ? montarTituloBloco(filtroAtivo.value) : '';
+
+    container.innerHTML =
+      '<div class="bloco-titulo"><h2>🔬 Deep Dive — Distribuição por Status</h2>' +
+      '<span>' + rotuloFiltro + ' · total: ' + formatarInteiro(dados.total) + '</span></div>' +
+      kpiHtml;
+  }
+
+  function carregarDeepDive() {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const container = document.getElementById('bloco-deepdive-status');
+    const carregamento = iniciarCarregamento(container);
+
+    google.script.run
+      .withSuccessHandler(function(dados) {
+        carregamento.finalizar();
+        renderizarDeepDive(container, dados);
+      })
+      .withFailureHandler(function(erro) {
+        carregamento.finalizar();
+        console.error('Erro ao carregar Deep Dive:', erro);
+        container.innerHTML =
+          '<div class="tabela-card"><div class="estado-vazio">Erro ao carregar dados. Veja o console.</div></div>';
+      })
+      .obterDistribuicaoStatusDeepDive(filtro);
+  }
+
+  // ===== Deep Dive: árvore de causa raiz por macro_status =====
+  function formatarPct1(valor) {
+    if (valor === null || valor === undefined || isNaN(valor)) return '—';
+    return (valor * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  }
+
+  const NOMES_INDICADORES_FRONT = {
+    is_error: 'Com erro',
+    bip_rejeito: 'Bip no Rejeito',
+    is_rr: 'RR Order',
+    is_sip: 'SIP',
+    is_rf: 'RF'
+  };
+
+  // ===== Download de detalhamento (CSV, abre no Excel) - sem depender de
+  // nenhuma biblioteca externa, gerado 100% no navegador. =====
+  function gerarDownloadCSV(linhas, nomeArquivo) {
+    if (!linhas || linhas.length === 0) {
+      alert('Nenhum registro encontrado para esse filtro.');
+      return;
+    }
+
+    const colunas = Object.keys(linhas[0]);
+    const partes = [colunas.join(';')];
+
+    linhas.forEach(function(linha) {
+      partes.push(colunas.map(function(c) {
+        const valor = linha[c] === null || linha[c] === undefined ? '' : String(linha[c]);
+        return '"' + valor.replace(/"/g, '""') + '"';
+      }).join(';'));
+    });
+
+    // \uFEFF (BOM) garante que acentos abram certo no Excel.
+    const conteudo = '\uFEFF' + partes.join('\r\n');
+    const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function baixarDetalhamento(condicoes, nomeArquivo, botaoEl) {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const textoOriginal = botaoEl.textContent;
+
+    botaoEl.textContent = '⏳';
+    botaoEl.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function(linhas) {
+        botaoEl.textContent = textoOriginal;
+        botaoEl.disabled = false;
+        gerarDownloadCSV(linhas, nomeArquivo);
+      })
+      .withFailureHandler(function(erro) {
+        botaoEl.textContent = textoOriginal;
+        botaoEl.disabled = false;
+        console.error('Erro ao baixar detalhamento:', erro);
+        alert('Erro ao gerar o detalhamento. Veja o console.');
+      })
+      .obterDetalhamentoFwd(JSON.stringify(condicoes), filtro);
+  }
+
+  // Listener único (delegação de evento) - funciona pra qualquer botão de
+  // download, mesmo os que ainda vão ser criados em renderizações futuras.
+  document.addEventListener('click', function(e) {
+    const botao = e.target.closest('.causaraiz-download-btn');
+    if (!botao) return;
+    const condicoes = JSON.parse(decodeURIComponent(botao.dataset.condicoes));
+    baixarDetalhamento(condicoes, botao.dataset.arquivo, botao);
+  });
+
+  function renderizarCausaRaiz(container, dados) {
+    if (!dados || !dados.temDados) {
+      container.innerHTML =
+        '<div class="bloco-titulo"><h2>🌳 Árvore de Causa Raiz</h2></div>' +
+        '<div class="tabela-card"><div class="estado-vazio">Nenhum dado encontrado.</div></div>';
+      return;
+    }
+
+    const cardsHtml = dados.cards.map(function(c, i) {
+      const principal = i === 0;
+
+      // Formata "qtd (pct%)" - usado em todos os itens do card.
+      function valorComQtd(qtd, pct) {
+        return formatarInteiro(qtd) + ' (' + formatarPct1(pct) + ')';
+      }
+
+      // Monta um item com botão de download - sempre inclui a condição de
+      // macro_status automaticamente, só precisa passar as condições extras
+      // específicas daquele item.
+      function item(labelTexto, qtd, pct, condicoesExtras, nomeArquivo, ramificacao) {
+        const condicoes = [{ tipo: 'igual', campo: 'macro_status', valor: c.macro_status }].concat(condicoesExtras);
+        const classe = ramificacao ? 'causaraiz-item causaraiz-item-ramificacao' : 'causaraiz-item';
+        const btn = '<button class="causaraiz-download-btn" data-condicoes="' + encodeURIComponent(JSON.stringify(condicoes)) +
+          '" data-arquivo="' + nomeArquivo.replace(/[^a-zA-Z0-9_-]/g, '_') + '" title="Baixar detalhamento (CSV)">⬇</button>';
+        return '<div class="' + classe + '"><span>' + labelTexto + '</span>' +
+          '<div class="causaraiz-item-valores"><span>' + valorComQtd(qtd, pct) + '</span>' + btn + '</div></div>';
+      }
+
+      const temRecebimentoMassivo = c.percentualRecebimentoMassivo !== undefined;
+
+      // Sub-status (top 3) + TO Completa como RAMIFICAÇÃO da linha 'SOC_Packed'
+      // (só aparece se houver pelo menos 1 pacote; sem a descrição técnica).
+      const subStatusRows = c.subStatus.map(function(s) {
+        const extras = [{ tipo: 'igual', campo: 'last_status', valor: s.last_status }];
+        if (temRecebimentoMassivo) extras.push({ tipo: 'actual_igual_station' });
+        return item(s.last_status, s.qtd, s.percentual, extras, 'substatus_' + c.macro_status + '_' + s.last_status);
+      });
+
+      if (temRecebimentoMassivo && c.toCompleta && c.toCompleta.naoMassivo.qtd > 0) {
+        const ramificacaoHtml = item(
+          '↳ TO Completa', c.toCompleta.naoMassivo.qtd, c.toCompleta.naoMassivo.percentual,
+          [{ tipo: 'actual_igual_station' }, { tipo: 'to_completa' }],
+          'to_completa_sem_massivo_' + c.macro_status, true
+        );
+        const indexSocPacked = c.subStatus.map(function(s) { return s.last_status; }).indexOf('SOC_Packed');
+        if (indexSocPacked !== -1) {
+          subStatusRows.splice(indexSocPacked + 1, 0, ramificacaoHtml);
+        } else {
+          subStatusRows.push(ramificacaoHtml);
+        }
+      }
+
+      const subStatusHtml = subStatusRows.join('');
+
+      // Indicadores Críticos + TO Completa do grupo de recebimento massivo
+      // (só aparece se houver pelo menos 1 pacote; sem a descrição técnica).
+      const indicadoresRelevantes = c.indicadores.filter(function(ind) { return ind.pct >= 0.05; });
+      const itensIndicadores = indicadoresRelevantes.map(function(ind) {
+        const extras = [{ tipo: 'flag_sim', campo: ind.chave }];
+        if (temRecebimentoMassivo) extras.push({ tipo: 'actual_igual_station' });
+        return item(NOMES_INDICADORES_FRONT[ind.chave], ind.qtd, ind.pct, extras, 'indicador_' + ind.chave + '_' + c.macro_status);
+      });
+
+      if (temRecebimentoMassivo && c.toCompleta && c.toCompleta.massivo.qtd > 0) {
+        const extrasTOMassivo = [{ tipo: 'actual_diferente_station' }, { tipo: 'to_completa' }];
+        itensIndicadores.push(item('TO Completa (Recebimento Massivo)', c.toCompleta.massivo.qtd, c.toCompleta.massivo.percentual, extrasTOMassivo, 'to_completa_massivo_' + c.macro_status));
+
+        (c.toCompleta.massivo.topEstacoes || []).forEach(function(e) {
+          const extrasEstacao = extrasTOMassivo.concat([{ tipo: 'actual_igual_valor', valor: e.estacao }]);
+          itensIndicadores.push(item('↳ ' + e.estacao, e.qtd, e.percentual, extrasEstacao, 'to_completa_massivo_' + e.estacao, true));
+        });
+      }
+
+      const indicadoresHtml = itensIndicadores.length > 0
+        ? itensIndicadores.join('')
+        : '<div class="causaraiz-item"><span style="color:var(--text-subtitle);">Nenhum indicador relevante (&lt;5%)</span></div>';
+
+      const perfilHtml = c.perfilPredominante
+        ? item(c.perfilPredominante.perfil, c.perfilPredominante.qtd, c.perfilPredominante.percentual,
+            [{ tipo: 'igual', campo: 'perfil_do_pacote', valor: c.perfilPredominante.perfil }], 'perfil_' + c.macro_status)
+        : '<div class="causaraiz-item"><span style="color:var(--text-subtitle);">Sem dado de perfil</span></div>';
+
+      // GMV em risco - foco em pacotes de alto valor (GMV > R$ 1.000).
+      const gmvFormatado = (c.gmvTotal || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const secaoGMV =
+        '<div class="causaraiz-secao">' +
+          '<div class="causaraiz-secao-titulo">GMV em Risco</div>' +
+          '<div class="causaraiz-item"><span>Total</span><span>' + gmvFormatado + '</span></div>' +
+          (c.altoValor && c.altoValor.qtd > 0
+            ? item('Alto valor (&gt; R$ 1.000)', c.altoValor.qtd, c.altoValor.percentual,
+                [{ tipo: 'maior_que', campo: 'gmv', valor: 1000 }], 'alto_valor_' + c.macro_status)
+            : '<div class="causaraiz-item"><span style="color:var(--text-subtitle);">Nenhum pacote acima de R$ 1.000</span></div>') +
+        '</div>';
+
+      // TOP 3 Linehaul Trip + TOP 3 TO - concentração por viagem/TO específica.
+      const secaoTripTO =
+        (c.topLinehaulTrip && c.topLinehaulTrip.length > 0
+          ? '<div class="causaraiz-secao">' +
+              '<div class="causaraiz-secao-titulo">TOP 3 Linehaul Trip</div>' +
+              c.topLinehaulTrip.map(function(t) {
+                return item(t.valor, t.qtd, t.percentual, [{ tipo: 'igual', campo: 'last_linehaul_trip', valor: t.valor }], 'trip_' + t.valor);
+              }).join('') +
+            '</div>'
+          : '') +
+        (c.topTO && c.topTO.length > 0
+          ? '<div class="causaraiz-secao">' +
+              '<div class="causaraiz-secao-titulo">TOP 3 TO</div>' +
+              c.topTO.map(function(t) {
+                return item(t.valor, t.qtd, t.percentual, [{ tipo: 'igual', campo: 'last_to_number', valor: t.valor }], 'to_' + t.valor);
+              }).join('') +
+            '</div>'
+          : '');
+
+      // Seção específica de recebimento massivo (só existe no card SOC_Packed).
+      const secaoRecebimentoMassivo = !temRecebimentoMassivo ? '' :
+        '<div class="causaraiz-secao">' +
+          '<div class="causaraiz-secao-titulo">Recebimento Massivo no Destino</div>' +
+          item('% do total de ' + c.macro_status, c.qtdRecebimentoMassivo, c.percentualRecebimentoMassivo,
+            [{ tipo: 'actual_diferente_station' }], 'recebimento_massivo_' + c.macro_status) +
+          (c.topFanoutOfensores && c.topFanoutOfensores.length > 0
+            ? '<div style="margin-top:6px; font-size:11px; color:var(--text-subtitle); font-weight:600;">TOP 3 FANOUT OFENSORES</div>' +
+              c.topFanoutOfensores.map(function(f, idxFanout) {
+                const extrasFanout = [{ tipo: 'actual_diferente_station' }, { tipo: 'actual_igual_valor', valor: f.estacao }];
+                const linhaFanout = item(f.estacao, f.qtd, f.percentual, extrasFanout, 'fanout_' + f.estacao);
+
+                // Só o #1 ofensor ganha o detalhamento aprofundado - a ideia
+                // aqui é chegar o mais perto possível da causa raiz daquele
+                // destino específico, então mostra tudo que tiver sinal
+                // (qtd > 0), não só o que passa de 5%.
+                if (idxFanout !== 0) return linhaFanout;
+
+                const ramificacoes = [];
+
+                (f.indicadores || [])
+                  .filter(function(ind) { return ind.qtd > 0; })
+                  .forEach(function(ind) {
+                    ramificacoes.push(item('↳ ' + NOMES_INDICADORES_FRONT[ind.chave], ind.qtd, ind.pct,
+                      extrasFanout.concat([{ tipo: 'flag_sim', campo: ind.chave }]), 'fanout_' + f.estacao + '_' + ind.chave, true));
+                  });
+
+                (f.subStatus || []).forEach(function(s) {
+                  ramificacoes.push(item('↳ Sub-status: ' + s.last_status, s.qtd, s.percentual,
+                    extrasFanout.concat([{ tipo: 'igual', campo: 'last_status', valor: s.last_status }]), 'fanout_' + f.estacao + '_' + s.last_status, true));
+                });
+
+                if (f.perfilPredominante) {
+                  ramificacoes.push(item('↳ Perfil: ' + f.perfilPredominante.perfil, f.perfilPredominante.qtd, f.perfilPredominante.percentual,
+                    extrasFanout.concat([{ tipo: 'igual', campo: 'perfil_do_pacote', valor: f.perfilPredominante.perfil }]), 'fanout_' + f.estacao + '_perfil', true));
+                }
+
+                if (f.toCompleta && f.toCompleta.qtd > 0) {
+                  ramificacoes.push(item('↳ TO Completa', f.toCompleta.qtd, f.toCompleta.percentual,
+                    extrasFanout.concat([{ tipo: 'to_completa' }]), 'fanout_' + f.estacao + '_to_completa', true));
+                }
+
+                return linhaFanout + ramificacoes.join('');
+              }).join('')
+            : '') +
+        '</div>';
+
+      return '<div class="causaraiz-card' + (principal ? ' principal-driver' : '') + '">' +
+        (principal ? '<span class="causaraiz-badge-driver">PRINCIPAL DRIVER</span>' : '') +
+        '<div class="causaraiz-cabecalho">' +
+          '<span class="causaraiz-nome">' + c.macro_status + '</span>' +
+          '<div>' +
+            '<div class="causaraiz-pct" style="color:' + (principal ? '#d9483f' : 'var(--text-title)') + ';">' + formatarPct1(c.percentualTotal) + '</div>' +
+            '<div class="causaraiz-lossrate">' + formatarInteiro(c.qtd) + ' pacotes</div>' +
+            '<div class="causaraiz-lossrate">Loss Rate: ' + (c.lossRate !== null ? formatarPercentual(c.lossRate) : '—') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="causaraiz-secao">' +
+          '<div class="causaraiz-secao-titulo">Sub-status' + (temRecebimentoMassivo ? ' (sem recebimento massivo)' : '') + '</div>' +
+          subStatusHtml +
+        '</div>' +
+        secaoRecebimentoMassivo +
+        '<div class="causaraiz-secao">' +
+          '<div class="causaraiz-secao-titulo">Indicadores Críticos</div>' +
+          indicadoresHtml +
+        '</div>' +
+        '<div class="causaraiz-secao">' +
+          '<div class="causaraiz-secao-titulo">Perfil Predominante</div>' +
+          perfilHtml +
+        '</div>' +
+        secaoGMV +
+        secaoTripTO +
+        '<div class="causaraiz-insight">' +
+          '<div class="causaraiz-insight-box">' +
+            '<div class="causaraiz-insight-titulo">💡 Insight</div>' +
+            '<div>' + c.insight + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    const filtroAtivo = document.getElementById('filtro-estacao');
+    const rotuloFiltro = filtroAtivo ? montarTituloBloco(filtroAtivo.value) : '';
+
+    container.innerHTML =
+      '<div class="bloco-titulo"><h2>🌳 Árvore de Causa Raiz</h2>' +
+      '<span>' + rotuloFiltro + ' · estratificação por macro_status</span></div>' +
+      '<div class="causaraiz-row">' + cardsHtml + '</div>';
+  }
+
+  function carregarCausaRaiz() {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const container = document.getElementById('bloco-deepdive-causaraiz');
+    const carregamento = iniciarCarregamento(container);
+
+    google.script.run
+      .withSuccessHandler(function(dados) {
+        carregamento.finalizar();
+        renderizarCausaRaiz(container, dados);
+      })
+      .withFailureHandler(function(erro) {
+        carregamento.finalizar();
+        console.error('Erro ao carregar árvore de causa raiz:', erro);
+        container.innerHTML =
+          '<div class="tabela-card"><div class="estado-vazio">Erro ao carregar dados. Veja o console.</div></div>';
+      })
+      .obterAnaliseCausaRaiz(filtro);
+  }
+
+  function carregarDistribuicaoStatus() {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const container = document.getElementById('bloco-distribuicao-status');
+    const carregamento = iniciarCarregamento(container);
+
+    google.script.run
+      .withSuccessHandler(function(dados) {
+        carregamento.finalizar();
+        renderizarDistribuicaoStatus(container, dados);
+        carregarObservacaoRecuperacao(filtro);
+      })
+      .withFailureHandler(function(erro) {
+        carregamento.finalizar();
+        console.error('Erro ao carregar distribuição de status:', erro);
+        container.innerHTML =
+          '<div class="tabela-card"><div class="estado-vazio">Erro ao carregar dados. Veja o console.</div></div>';
+      })
+      .obterDistribuicaoStatus(filtro);
+  }
+
+  // ===== Observação: quantos pacotes precisam ser recuperados do forecast
+  // pra fechar o mês dentro do target. Carregada separadamente (chamada
+  // própria ao servidor) e injetada no placeholder que já veio dentro do
+  // HTML renderizado por renderizarDistribuicaoStatus.
+  function carregarObservacaoRecuperacao(filtro) {
+    const alvoBox = document.getElementById('observacao-recuperacao');
+    const alvoTabela = document.getElementById('observacao-recuperacao-tabela');
+    if (!alvoBox) return;
+
+    alvoBox.innerHTML = '<div class="observacao-box"><span class="observacao-icone">⏳</span><span>Calculando recuperação necessária…</span></div>';
+    if (alvoTabela) alvoTabela.innerHTML = '';
+
+    google.script.run
+      .withSuccessHandler(function(dados) {
+        const partes = montarObservacaoRecuperacao(dados);
+        alvoBox.innerHTML = partes.box;
+        if (alvoTabela) alvoTabela.innerHTML = partes.tabela;
+      })
+      .withFailureHandler(function(erro) {
+        console.error('Erro ao calcular recuperação necessária:', erro);
+        alvoBox.innerHTML = '';
+      })
+      .obterRecuperacaoNecessaria(filtro);
+  }
+
+  // Expande/recolhe as linhas de semana de um mês na tabela de recuperação.
+  function toggleSemanasMes(chave) {
+    const linhas = document.querySelectorAll('tr[data-semanas-de="' + chave + '"]');
+    if (linhas.length === 0) return;
+
+    const seta = document.getElementById('seta-' + chave);
+    const abrir = linhas[0].style.display === 'none';
+
+    linhas.forEach(function(l) { l.style.display = abrir ? 'table-row' : 'none'; });
+    if (seta) seta.textContent = abrir ? '▼' : '▶';
+  }
+
+  function montarObservacaoRecuperacao(dados) {
+    if (!dados || !dados.temDados) return { box: '', tabela: '' };
+
+    function montarStatusTexto(item) {
+      if (!item.temTarget) return '<span class="rank-celula-vazia">sem target</span>';
+      if (item.dentroDoTarget) return '<span style="color:#3fa855; font-weight:600;">✅ Dentro do target</span>';
+      if (item.insalvavel) return '<span style="color:#d9483f; font-weight:700;">🚫 Recuperar todo forecast (' + formatarInteiro(item.forecast) + ') não é suficiente</span>';
+      return '<span style="color:#d9483f; font-weight:600;">⚠️ Recuperar ' + formatarInteiro(item.pacotesARecuperar) + '</span>';
+    }
+
+    const linhasMes = dados.porMes.map(function(m) {
+      const nomeMes = (NOMES_MES[m.mes] || m.mes) + '/' + String(m.ano).slice(-2);
+      const chave = m.ano + '-' + m.mes;
+      const temSemanas = m.semanas && m.semanas.length > 0;
+
+      const linhasSemana = temSemanas ? m.semanas.map(function(s) {
+        return '<tr class="linha-semana-recuperacao" data-semanas-de="' + chave + '" style="display:none;">' +
+          '<td style="padding-left:32px; color:var(--text-subtitle);">↳ Sem ' + s.semana + '</td>' +
+          '<td>' + formatarInteiro(s.lossesRealizados) + '</td>' +
+          '<td>' + formatarInteiro(s.forecast) + '</td>' +
+          '<td>' + formatarInteiro(s.totalProjetado) + '</td>' +
+          '<td>' + (s.temTarget ? formatarInteiro(s.teto) : '<span class="rank-celula-vazia">—</span>') + '</td>' +
+          '<td>' + montarStatusTexto(s) + '</td>' +
+        '</tr>';
+      }).join('') : '';
+
+      const seta = temSemanas
+        ? '<span id="seta-' + chave + '" style="display:inline-block; width:14px; color:var(--text-subtitle);">▶</span> '
+        : '<span style="display:inline-block; width:14px;"></span> ';
+      const onclick = temSemanas ? ' onclick="toggleSemanasMes(\'' + chave + '\')" style="cursor:pointer;"' : '';
+
+      return '<tr' + onclick + '>' +
+        '<td>' + seta + nomeMes + '</td>' +
+        '<td>' + formatarInteiro(m.lossesRealizados) + '</td>' +
+        '<td>' + formatarInteiro(m.forecast) + '</td>' +
+        '<td>' + formatarInteiro(m.totalProjetado) + '</td>' +
+        '<td>' + (m.temTarget ? formatarInteiro(m.teto) : '<span class="rank-celula-vazia">sem target</span>') + '</td>' +
+        '<td>' + montarStatusTexto(m) + '</td>' +
+      '</tr>' + linhasSemana;
+    }).join('');
+
+    const mesesInsalvaveis = dados.porMes.filter(function(m) { return m.insalvavel; });
+    const temPendenciaRecuperavel = dados.totalGeralARecuperar > 0;
+    const tudoOk = mesesInsalvaveis.length === 0 && !temPendenciaRecuperavel;
+
+    // Status objetivo de cada mês, sempre listado - nunca resume pra "tudo ok"
+    // se algum mês estiver perdido, mesmo que a soma de recuperação dê zero.
+    // Semanas fora do target (mas ainda recuperáveis) aparecem como sub-itens.
+    const itensMes = dados.porMes.map(function(m) {
+      const nomeMes = (NOMES_MES[m.mes] || m.mes) + '/' + String(m.ano).slice(-2);
+      let iconeMes, textoMes;
+
+      if (!m.temTarget) {
+        iconeMes = 'ℹ️'; textoMes = 'sem target cadastrado';
+      } else if (m.insalvavel) {
+        iconeMes = '🚫'; textoMes = 'perdido — perdas já realizadas ultrapassam o teto';
+      } else if (m.dentroDoTarget) {
+        iconeMes = '✅'; textoMes = 'dentro do teto';
+      } else {
+        iconeMes = '⚠️'; textoMes = 'recuperar ' + formatarInteiro(m.pacotesARecuperar) + ' pacotes';
+      }
+
+      const semanasProblema = (m.semanas || []).filter(function(s) {
+        return s.temTarget && !s.dentroDoTarget && !s.insalvavel;
+      });
+
+      const semanasHtml = semanasProblema.length > 0
+        ? '<div class="observacao-semanas">' +
+            semanasProblema.map(function(s) {
+              return '<span class="observacao-semana-item">↳ Sem' + s.semana + ': recuperar ' + formatarInteiro(s.pacotesARecuperar) + '</span>';
+            }).join('') +
+          '</div>'
+        : '';
+
+      return '<div class="observacao-mes-item">' +
+        '<span class="observacao-mes-titulo">' + iconeMes + ' ' + nomeMes + '</span> — ' + textoMes +
+        semanasHtml +
+      '</div>';
+    }).join('');
+
+    const resumoIcone = tudoOk ? '✅' : '⚠️';
+    const resumoTexto = temPendenciaRecuperavel
+      ? 'Recuperar <strong>' + formatarInteiro(dados.totalGeralARecuperar) + ' pacotes</strong> do forecast para ficar dentro do target.'
+      : (tudoOk ? 'Todos os meses do período estão dentro do teto de perdas.' : 'Há mês(es) já perdido(s) no período — veja o detalhamento abaixo.');
+
+    const classeExtra = tudoOk ? ' dentro-target' : (mesesInsalvaveis.length > 0 ? ' tem-insalvavel' : '');
+    const boxHtml = '<div class="observacao-box' + classeExtra + '">' +
+      '<span class="observacao-icone">' + resumoIcone + '</span>' +
+      '<div style="flex:1;">' +
+        '<div>' + resumoTexto + '</div>' +
+        '<div class="observacao-lista">' + itensMes + '</div>' +
+      '</div>' +
+    '</div>';
+
+    const tabelaHtml = '<div class="tabela-card">' +
+      '<table class="tabela-estacoes">' +
+        '<thead><tr><th>Mês</th><th>Losses Realizados</th><th>Forecast</th><th>Total Projetado</th><th>Teto Permitido</th><th>Status</th></tr></thead>' +
+        '<tbody>' + linhasMes + '</tbody>' +
+      '</table>' +
+    '</div>';
+
+    return { box: boxHtml, tabela: tabelaHtml };
+  }
+
+  // ===== Aba Analítico SoC: distribuição por aging_by_loss =====
+  // Gráfico de barras: quantidade projetada por dia (aging_by_loss), com
+  // linha tracejada indicando o teto restante do mês atual.
+  function construirGraficoAgingSVG(dados) {
+    const linhas = dados.linhas;
+    if (!linhas || linhas.length === 0) return '<div class="estado-vazio">Sem dados para o gráfico.</div>';
+
+    const altura = 190;
+    const margemEsq = 50, margemDir = 14, margemTopo = 26, margemBaixo = 30;
+    const larguraBarraBase = 48;
+    // Número mínimo de "slots" usado só pra calcular a largura da barra -
+    // garante que a barra tenha sempre a mesma largura visual, com poucos ou
+    // muitos dias no eixo X. Com menos dias que isso, sobra espaço vazio à
+    // direita em vez de esticar as barras existentes pra preencher tudo.
+    const SLOTS_REFERENCIA = 12;
+    const numSlots = Math.max(linhas.length, SLOTS_REFERENCIA);
+    const larguraViewBox = margemEsq + margemDir + numSlots * larguraBarraBase;
+    const larguraUtilReal = margemEsq + linhas.length * larguraBarraBase; // até onde de fato há barras
+    const alturaUtil = altura - margemTopo - margemBaixo;
+    const passo = larguraBarraBase;
+    const larguraBarra = passo * 0.6;
+
+    const maxBarra = Math.max.apply(null, linhas.map(function(l) { return l.qtd_remessas; }).concat([0]));
+
+    // Calcula a linha de saldo (limite de perdas) ANTES de definir a escala,
+    // porque ela pode ficar negativa (se o forecast acumulado passar do
+    // limite disponível) e a escala precisa contemplar isso.
+    let valoresSaldo = [];
+    if (dados.tetoRestante !== null && dados.tetoRestante !== undefined) {
+      let saldo = dados.tetoRestante;
+      valoresSaldo = linhas.map(function(l) {
+        saldo -= l.qtd_remessas;
+        return saldo;
+      });
+    }
+
+    const minSaldo = valoresSaldo.length > 0 ? Math.min.apply(null, valoresSaldo.concat([0])) : 0;
+    const maxTopo = Math.max(maxBarra, dados.tetoRestante || 0, valoresSaldo.length > 0 ? Math.max.apply(null, valoresSaldo) : 0);
+
+    const maxValor = maxTopo * 1.25 || 1;
+    const minValor = Math.min(0, minSaldo * 1.15); // margem extra só se saldo ficar negativo
+    const faixaValor = (maxValor - minValor) || 1;
+
+    function escalaY(v) { return margemTopo + alturaUtil - ((v - minValor) / faixaValor) * alturaUtil; }
+    function escalaX(i) { return margemEsq + passo * i + (passo - larguraBarra) / 2; }
+
+    let svg = '<svg viewBox="0 0 ' + larguraViewBox + ' ' + altura + '" width="100%" height="' + altura + '" ' +
+      'preserveAspectRatio="none" style="display:block" xmlns="http://www.w3.org/2000/svg">';
+
+    [0, 0.5, 1].forEach(function(frac) {
+      const v = maxValor * frac;
+      const y = escalaY(v);
+      svg += '<line x1="' + margemEsq + '" y1="' + y + '" x2="' + (larguraViewBox - margemDir) + '" y2="' + y +
+        '" stroke="var(--border-color)" stroke-width="1"/>';
+      svg += '<text x="' + (margemEsq - 8) + '" y="' + (y + 3) + '" font-size="10" text-anchor="end" fill="var(--text-subtitle)">' +
+        Math.round(v).toLocaleString('pt-BR') + '</text>';
+    });
+
+    // Linha de zero, se o saldo puder ficar negativo (deixa claro onde é o "estouro").
+    if (minSaldo < 0) {
+      const yZero = escalaY(0);
+      svg += '<line x1="' + margemEsq + '" y1="' + yZero + '" x2="' + (larguraViewBox - margemDir) + '" y2="' + yZero +
+        '" stroke="var(--text-subtitle)" stroke-width="1"/>';
+    }
+
+    linhas.forEach(function(l, i) {
+      const x = escalaX(i);
+      const yTopo = escalaY(l.qtd_remessas);
+      const yBase = escalaY(0);
+      const urgente = l.aging_by_loss <= 1;
+      const cor = urgente ? '#d9483f' : 'var(--chart-forecast)';
+
+      svg += '<rect x="' + x + '" y="' + yTopo + '" width="' + larguraBarra + '" height="' + (yBase - yTopo) +
+        '" fill="' + cor + '" rx="2"/>';
+      svg += '<text x="' + (x + larguraBarra / 2) + '" y="' + (yTopo - 6) + '" font-size="10" font-weight="700" ' +
+        'text-anchor="middle" fill="var(--text-title)">' + formatarInteiro(l.qtd_remessas) + '</text>';
+
+      const rotulo = l.aging_by_loss === 0 ? 'Hoje' : l.aging_by_loss + 'd';
+      svg += '<text x="' + (x + larguraBarra / 2) + '" y="' + (altura - margemBaixo + 16) + '" font-size="' +
+        (urgente ? '11' : '10.5') + '" font-weight="' + (urgente ? '700' : '500') + '" text-anchor="middle" ' +
+        'fill="' + (urgente ? '#d9483f' : 'var(--text-subtitle)') + '">' + rotulo + '</text>';
+    });
+
+    // Linha do LIMITE DE PERDAS - começa no teto restante do mês e vai
+    // descendo dia a dia, subtraindo o forecast daquele dia (as perdas que
+    // "entram" naquele dia consomem o limite disponível pros dias seguintes).
+    if (valoresSaldo.length > 0) {
+      const pontosLimite = valoresSaldo.map(function(saldo, i) {
+        return { x: escalaX(i) + larguraBarra / 2, y: escalaY(saldo), valor: saldo };
+      });
+
+      const pontosSvg = pontosLimite.map(function(p) { return p.x + ',' + p.y; }).join(' ');
+      svg += '<polyline points="' + pontosSvg + '" fill="none" stroke="#d9483f" stroke-width="1.75" stroke-dasharray="6,4"/>';
+
+      pontosLimite.forEach(function(p) {
+        svg += '<g class="ponto-limite-grupo">' +
+          '<circle cx="' + p.x + '" cy="' + p.y + '" r="8" fill="transparent"/>' +
+          '<circle class="ponto-limite-marcador" cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="#d9483f"/>' +
+          '<text class="ponto-limite-rotulo" x="' + p.x + '" y="' + (p.y - 8) + '" font-size="9.5" font-weight="700" ' +
+          'text-anchor="middle" fill="#d9483f">' + formatarInteiro(p.valor) + '</text>' +
+        '</g>';
+      });
+    }
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  function renderizarAging(container, dados) {
+    if (!dados || !dados.linhas || dados.linhas.length === 0) {
+      container.innerHTML =
+        '<div class="bloco-titulo"><h2>⏳ Aging até a Perda</h2></div>' +
+        '<div class="tabela-card"><div class="estado-vazio">Nenhum dado encontrado.</div></div>';
+      return;
+    }
+
+    const kpiHtml =
+      '<div class="kpi-coluna">' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Viram perda HOJE (aging = 0)</div>' +
+          '<div class="kpi-value" style="color:#d9483f;">' + formatarInteiro(dados.resumo.hoje) + '</div>' +
+        '</div>' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Até amanhã (aging ≤ 1)</div>' +
+          '<div class="kpi-value" style="color:#e0752c;">' + formatarInteiro(dados.resumo.ateAmanha) + '</div>' +
+        '</div>' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Até 3 dias (aging ≤ 3)</div>' +
+          '<div class="kpi-value">' + formatarInteiro(dados.resumo.ate3Dias) + '</div>' +
+        '</div>' +
+        '<div class="kpi-card">' +
+          '<div class="kpi-label">Até 7 dias (aging ≤ 7)</div>' +
+          '<div class="kpi-value">' + formatarInteiro(dados.resumo.ate7Dias) + '</div>' +
+        '</div>' +
+      '</div>';
+
+    const linhasHtml = dados.linhas.map(function(l) {
+      const percentualTexto = (l.percentual * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+      const acumuladoTexto = (l.percentualAcumulado * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+      const urgente = l.aging_by_loss <= 1;
+      return '<tr' + (urgente ? ' style="background:rgba(217,72,63,0.1);"' : '') + '>' +
+        '<td>' + (l.aging_by_loss === 0 ? '<strong style="color:#d9483f;">Hoje (0)</strong>' : l.aging_by_loss + ' dia(s)') + '</td>' +
+        '<td>' + formatarInteiro(l.qtd_remessas) + '</td>' +
+        '<td>' + percentualTexto + '</td>' +
+        '<td>' + formatarInteiro(l.acumulado) + ' (' + acumuladoTexto + ')</td>' +
+        '</tr>';
+    }).join('');
+
+    const filtroAtivo = document.getElementById('filtro-estacao');
+    const rotuloFiltro = filtroAtivo ? montarTituloBloco(filtroAtivo.value) : '';
+
+    const graficoHtml =
+      '<div class="grafico-com-kpis">' +
+        '<div class="grafico-card">' +
+          '<div class="grafico-legenda">' +
+            '<span><span class="legenda-cor" style="background:#d9483f"></span>Urgente (hoje/amanhã)</span>' +
+            '<span><span class="legenda-cor" style="background:var(--chart-forecast)"></span>Demais dias</span>' +
+            '<span><span class="legenda-linha" style="border-top-color:#d9483f"></span>Limite de Perdas</span>' +
+          '</div>' +
+          construirGraficoAgingSVG(dados) +
+        '</div>' +
+        kpiHtml +
+      '</div>';
+
+    container.innerHTML =
+      '<div class="bloco-titulo"><h2>⏳ Aging até a Perda</h2>' +
+      '<span>' + rotuloFiltro + ' · 0 = hoje - total: ' + formatarInteiro(dados.total) + '</span></div>' +
+      graficoHtml +
+      '<div class="tabela-card">' +
+        '<table class="tabela-estacoes">' +
+          '<thead><tr>' +
+            '<th>Aging (dias até a perda)</th><th>Pacotes</th><th>% do Total</th><th>Acumulado</th>' +
+          '</tr></thead>' +
+          '<tbody>' + linhasHtml + '</tbody>' +
+        '</table>' +
+      '</div>';
+  }
+
+  function carregarAging() {
+    const select = document.getElementById('filtro-estacao');
+    const filtro = select ? select.value : 'OVERALL';
+    const container = document.getElementById('bloco-aging');
+    const carregamento = iniciarCarregamento(container);
+
+    google.script.run
+      .withSuccessHandler(function(dados) {
+        carregamento.finalizar();
+        renderizarAging(container, dados);
+      })
+      .withFailureHandler(function(erro) {
+        carregamento.finalizar();
+        console.error('Erro ao carregar aging:', erro);
+        container.innerHTML =
+          '<div class="tabela-card"><div class="estado-vazio">Erro ao carregar dados. Veja o console.</div></div>';
+      })
+      .obterDistribuicaoAging(filtro);
+  }
+</script>
+
+</body>
+</html>
