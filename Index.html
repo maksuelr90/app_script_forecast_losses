@@ -55,10 +55,6 @@
   .header-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
 
   .status-block { text-align: right; }
-  .sync-badge { display: none; align-items: center; justify-content: flex-end; gap: 5px; font-size: 11px; font-weight: 600; color: #e8622c; margin-bottom: 3px; }
-  .sync-badge.visivel { display: flex; }
-  .sync-badge .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #e8622c; animation: pulsar 1.2s ease-in-out infinite; }
-  @keyframes pulsar { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
   .status-line { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; color: var(--text-status); }
   .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #3fa855; flex-shrink: 0; }
   .tags-line { font-size: 11px; color: #e8622c; margin-top: 2px; }
@@ -84,12 +80,26 @@
   /* ===== Modal de sincronização da base de dados ===== */
   .sync-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 110; align-items: center; justify-content: center; }
   .sync-modal-overlay.visivel { display: flex; }
-  .sync-modal { background: var(--bg-header); border-radius: 10px; width: 420px; max-width: 90vw; padding: 26px 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+  .sync-modal { background: var(--bg-header); border-radius: 10px; width: 420px; max-width: 90vw; padding: 26px 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.4); position: relative; }
+  .sync-modal-fechar { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text-subtitle); font-size: 16px; cursor: pointer; padding: 4px 8px; line-height: 1; }
+  .sync-modal-fechar:hover { color: var(--text-title); }
   .sync-modal .spinner { width: 32px; height: 32px; margin: 0 auto 16px; }
   .sync-modal-titulo { font-size: 15px; font-weight: 700; color: var(--text-title); margin-bottom: 8px; }
   .sync-modal-texto { font-size: 13px; color: var(--text-status); line-height: 1.5; margin-bottom: 12px; }
-  .sync-modal-grass { font-size: 12.5px; color: var(--text-subtitle); }
+  .sync-modal-grass { font-size: 12.5px; color: var(--text-subtitle); margin-bottom: 14px; }
   .sync-modal-grass strong { color: var(--text-title); }
+  .sync-modal-progresso-track { width: 100%; height: 7px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-bottom: 6px; }
+  .sync-modal-progresso-fill { height: 100%; background: #e8622c; width: 0%; transition: width .4s ease; border-radius: 4px; }
+  .sync-modal-progresso-pct { font-size: 12px; font-weight: 700; color: var(--text-title); margin-bottom: 8px; }
+  .sync-modal-log { font-size: 11px; color: var(--text-subtitle); font-family: monospace; min-height: 14px; margin-bottom: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sync-modal-aviso { font-size: 12px; color: var(--text-subtitle); border-top: 1px solid var(--border-color); padding-top: 12px; }
+
+  /* Badge compacta no header, exibida quando o modal é fechado mas a
+     sincronização continua rodando em segundo plano. */
+  .sync-badge { display: none; align-items: center; justify-content: flex-end; gap: 5px; font-size: 11px; font-weight: 600; color: #e8622c; margin-bottom: 3px; cursor: pointer; }
+  .sync-badge.visivel { display: flex; }
+  .sync-badge .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #e8622c; animation: pulsar 1.2s ease-in-out infinite; flex-shrink: 0; }
+  @keyframes pulsar { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
   .header-tabs { display: flex; align-items: center; padding: 0 20px; gap: 4px; overflow-x: auto; }
 
@@ -230,6 +240,10 @@
 
     <div class="header-right">
       <div class="status-block">
+        <div class="sync-badge" id="sync-badge" title="Clique para ver detalhes">
+          <span class="sync-dot"></span>
+          <span>Atualizando base de dados…<span id="sync-badge-pct"></span></span>
+        </div>
         <div class="status-line">
           <span class="status-dot"></span>
           <span id="status-text">Carregando…</span>
@@ -256,10 +270,17 @@
   <!-- Modal informativo de sincronização da base de dados -->
   <div id="sync-modal-overlay" class="sync-modal-overlay">
     <div class="sync-modal">
+      <button id="sync-modal-fechar" class="sync-modal-fechar" aria-label="Fechar" title="Fechar">✕</button>
       <div class="spinner"></div>
       <div class="sync-modal-titulo">Atualizando base de dados</div>
-      <div class="sync-modal-texto">A base de dados está sendo atualizada com os dados mais recentes. Isso pode levar alguns minutos.</div>
-      <div class="sync-modal-grass">Última atualização registrada: <strong id="sync-modal-grass">—</strong></div>
+      <div class="sync-modal-texto">A base de dados está sendo atualizada com os dados mais recentes.</div>
+      <div class="sync-modal-grass">Última atualização detectada: <strong id="sync-modal-grass">—</strong></div>
+      <div class="sync-modal-progresso-track">
+        <div class="sync-modal-progresso-fill" id="sync-modal-progresso-fill"></div>
+      </div>
+      <div class="sync-modal-progresso-pct" id="sync-modal-progresso-pct">0% concluído</div>
+      <div class="sync-modal-log" id="sync-modal-log"></div>
+      <div class="sync-modal-aviso">Você não precisa esperar — pode fechar este aviso e continuar navegando pelo dashboard normalmente. Os dados serão atualizados automaticamente assim que a sincronização terminar.</div>
     </div>
   </div>
 
@@ -457,23 +478,65 @@
 
   const syncModalOverlay = document.getElementById('sync-modal-overlay');
   const syncModalGrass = document.getElementById('sync-modal-grass');
+  const syncModalFechar = document.getElementById('sync-modal-fechar');
+  const syncModalProgressoFill = document.getElementById('sync-modal-progresso-fill');
+  const syncModalProgressoPct = document.getElementById('sync-modal-progresso-pct');
+  const syncModalLog = document.getElementById('sync-modal-log');
+  const syncBadge = document.getElementById('sync-badge');
+  const syncBadgePct = document.getElementById('sync-badge-pct');
   let intervaloPolling = null;
+  let modalFechadoPeloUsuario = false; // true enquanto o usuário optar por só ver a badge
+
+  // Atualiza a barra/percentual no modal, o percentual na badge do header, e
+  // a linha de log em tempo real (mostra que o processo está avançando,
+  // mesmo em etapas demoradas onde o % ainda não mudou).
+  function atualizarProgressoSincronizacao(progresso, ultimoLog) {
+    const pct = (typeof progresso === 'number' && !isNaN(progresso)) ? progresso : 0;
+    syncModalProgressoFill.style.width = pct + '%';
+    syncModalProgressoPct.textContent = pct + '% concluído';
+    syncBadgePct.textContent = ' ' + pct + '%';
+    if (ultimoLog) {
+      syncModalLog.textContent = ultimoLog;
+      syncModalLog.title = ultimoLog;
+    }
+  }
 
   // Mostra o modal informativo de sincronização. Chamado tanto quando este
   // usuário disparou a atualização quanto quando outro usuário abre a página
   // e encontra a sincronização já em andamento.
-  function mostrarModalSincronizacao(grassDatetime) {
+  function mostrarModalSincronizacao(grassDatetime, progresso, ultimoLog) {
     syncModalGrass.textContent = grassDatetime || '—';
+    atualizarProgressoSincronizacao(progresso, ultimoLog);
     syncModalOverlay.classList.add('visivel');
+    syncBadge.classList.remove('visivel'); // modal aberto -> não precisa da badge também
   }
 
-  function esconderModalSincronizacao() {
+  // Fecha só a janela do modal (não interrompe a sincronização, que continua
+  // rodando em segundo plano) e mostra a badge compacta no header como
+  // lembrete discreto de que a base ainda está sendo atualizada.
+  function esconderModalSincronizacao(manterBadge) {
     syncModalOverlay.classList.remove('visivel');
+    if (manterBadge) {
+      syncBadge.classList.add('visivel');
+    } else {
+      syncBadge.classList.remove('visivel');
+    }
   }
+
+  syncModalFechar.addEventListener('click', function() {
+    modalFechadoPeloUsuario = true;
+    esconderModalSincronizacao(true);
+  });
+
+  // Clicar na badge reabre o modal com os detalhes.
+  syncBadge.addEventListener('click', function() {
+    modalFechadoPeloUsuario = false;
+    mostrarModalSincronizacao(syncModalGrass.textContent, parseInt(syncModalProgressoPct.textContent, 10), syncModalLog.textContent);
+  });
 
   // Fica perguntando ao servidor, de tempos em tempos, se a sincronização
-  // (iniciada por este usuário ou por outro) já terminou. Só chamada
-  // enquanto o modal estiver visível.
+  // (iniciada por este usuário ou por outro) já terminou. Roda em segundo
+  // plano independentemente do modal estar aberto ou fechado.
   function iniciarPollingSincronizacao() {
     if (intervaloPolling) return; // já tem um polling rodando, não duplica
 
@@ -483,7 +546,8 @@
           if (!resultado.emAndamento) {
             clearInterval(intervaloPolling);
             intervaloPolling = null;
-            esconderModalSincronizacao();
+            modalFechadoPeloUsuario = false; // próxima sincronização pode mostrar o modal de novo
+            esconderModalSincronizacao(false);
             exibirCorteAtualizacao(resultado.grassDatetime);
 
             // Base de dados acabou de ser atualizada - recarrega os dados
@@ -491,8 +555,11 @@
             // precisar que o usuário dê F5 na página.
             carregarTudo();
           } else {
-            // Ainda em andamento - mantém a data exibida no modal atualizada.
+            // Ainda em andamento - mantém a data, o progresso e o log
+            // (modal e/ou badge) atualizados.
             syncModalGrass.textContent = resultado.grassDatetime || '—';
+            atualizarProgressoSincronizacao(resultado.progresso, resultado.ultimoLog);
+            statusText.textContent = 'Atualizando base de dados… ' + (resultado.progresso || 0) + '%';
           }
         })
         .withFailureHandler(function(erro) {
@@ -509,9 +576,17 @@
       .withSuccessHandler(function(resultado) {
         if (resultado && resultado.status === 'atualizando') {
           // Mostra o modal informativo enquanto a sincronização não terminar
-          // (pode ter sido iniciada por este usuário ou por outro).
-          mostrarModalSincronizacao(resultado.grassDatetime);
-          statusText.textContent = 'Atualizando base de dados…';
+          // (pode ter sido iniciada por este usuário ou por outro) - a menos
+          // que o usuário já tenha fechado o modal manualmente antes; nesse
+          // caso, só garante que a badge continue visível, sem reabrir por
+          // cima do que o usuário está vendo.
+          if (modalFechadoPeloUsuario) {
+            syncBadge.classList.add('visivel');
+            atualizarProgressoSincronizacao(resultado.progresso, resultado.ultimoLog);
+          } else {
+            mostrarModalSincronizacao(resultado.grassDatetime, resultado.progresso, resultado.ultimoLog);
+          }
+          statusText.textContent = 'Atualizando base de dados… ' + (resultado.progresso || 0) + '%';
           iniciarPollingSincronizacao();
           return;
         }
@@ -544,6 +619,14 @@
   }
 
   verificarAtualizacaoDaBase();
+
+  // Enquanto a página estiver aberta, verifica periodicamente (a cada 10
+  // minutos) se surgiu necessidade de atualizar a base - mesmo que nenhuma
+  // sincronização esteja em andamento no momento. Se já houver uma em
+  // andamento (iniciada por este usuário ou por outro), o próprio
+  // verificarAtualizacaoDaBase() cuida de reaproveitar o polling existente
+  // sem duplicar nada.
+  setInterval(verificarAtualizacaoDaBase, 10 * 60 * 1000);
 
   // ===== Painel Gerencial =====
   const NOMES_MES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
