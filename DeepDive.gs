@@ -202,6 +202,40 @@ function obterAnaliseCausaRaiz(filtroEstacao) {
     .map(function(r) { return r.macro_status; })
     .filter(function(m, i, arr) { return arr.indexOf(m) === i; });
 
+  // ===== TOP 3 Linehaul Trip por macro_status (TODOS de uma vez) =====
+  // Antes: 1 query por macro_status dentro do loop de cards (3 macro_status
+  // = 3 queries). Padronizado com o mesmo padrão já usado acima pra
+  // indicadores/gmv/perfil: 1 query com QUALIFY + ROW_NUMBER, filtrada por
+  // macro depois em JS.
+  const queryTopLinehaul = `
+    SELECT macro_status, last_linehaul_trip, COUNT(DISTINCT shipment_id) AS qtd
+    FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
+    WHERE station_code LIKE 'SOC-%'
+      AND last_linehaul_trip IS NOT NULL
+      AND last_linehaul_trip != ''
+      ${condicao}
+    GROUP BY macro_status, last_linehaul_trip
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY macro_status ORDER BY COUNT(DISTINCT shipment_id) DESC) <= 3
+    ORDER BY macro_status, qtd DESC
+  `;
+  const topLinehaulRows = executarQuery_(queryTopLinehaul);
+  topLinehaulRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); });
+
+  // ===== TOP 3 TO / last_to_number por macro_status (TODOS de uma vez) =====
+  const queryTopTO = `
+    SELECT macro_status, last_to_number, COUNT(DISTINCT shipment_id) AS qtd
+    FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
+    WHERE station_code LIKE 'SOC-%'
+      AND last_to_number IS NOT NULL
+      AND last_to_number != ''
+      ${condicao}
+    GROUP BY macro_status, last_to_number
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY macro_status ORDER BY COUNT(DISTINCT shipment_id) DESC) <= 3
+    ORDER BY macro_status, qtd DESC
+  `;
+  const topTORows = executarQuery_(queryTopTO);
+  topTORows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); });
+
   const cards = macrosUnicos.map(function(macro) {
     const linhasDoMacro = statusRows.filter(function(r) { return r.macro_status === macro; });
     const qtdMacro = linhasDoMacro.reduce(function(acc, r) { return acc + r.qtd; }, 0);
@@ -237,42 +271,21 @@ function obterAnaliseCausaRaiz(filtroEstacao) {
     const percentualAltoValor = qtdMacro > 0 ? qtdAltoValor / qtdMacro : 0;
 
     // ===== TOP 3 Linehaul Trip (concentração por viagem específica) =====
-    const queryTrip = `
-      SELECT last_linehaul_trip, COUNT(DISTINCT shipment_id) AS qtd
-      FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
-      WHERE station_code LIKE 'SOC-%'
-        AND macro_status = '${macro}'
-        AND last_linehaul_trip IS NOT NULL
-        AND last_linehaul_trip != ''
-        ${condicao}
-      GROUP BY last_linehaul_trip
-      ORDER BY qtd DESC
-      LIMIT 3
-    `;
-    const tripRows = executarQuery_(queryTrip);
-    tripRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); });
-    const topLinehaulTrip = tripRows.map(function(r) {
-      return { valor: r.last_linehaul_trip, qtd: r.qtd, percentual: qtdMacro > 0 ? r.qtd / qtdMacro : 0 };
-    });
+    // Filtra em JS a partir de topLinehaulRows (já consolidado acima, 1 query
+    // só pra todos os macro_status - não dispara mais 1 query por card).
+    const topLinehaulTrip = topLinehaulRows
+      .filter(function(r) { return r.macro_status === macro; })
+      .map(function(r) {
+        return { valor: r.last_linehaul_trip, qtd: r.qtd, percentual: qtdMacro > 0 ? r.qtd / qtdMacro : 0 };
+      });
 
     // ===== TOP 3 TO / last_to_number (concentração por TO específica) =====
-    const queryTO = `
-      SELECT last_to_number, COUNT(DISTINCT shipment_id) AS qtd
-      FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
-      WHERE station_code LIKE 'SOC-%'
-        AND macro_status = '${macro}'
-        AND last_to_number IS NOT NULL
-        AND last_to_number != ''
-        ${condicao}
-      GROUP BY last_to_number
-      ORDER BY qtd DESC
-      LIMIT 3
-    `;
-    const toRows = executarQuery_(queryTO);
-    toRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); });
-    const topTO = toRows.map(function(r) {
-      return { valor: r.last_to_number, qtd: r.qtd, percentual: qtdMacro > 0 ? r.qtd / qtdMacro : 0 };
-    });
+    // Mesmo padrão: filtra em JS a partir de topTORows já consolidado.
+    const topTO = topTORows
+      .filter(function(r) { return r.macro_status === macro; })
+      .map(function(r) {
+        return { valor: r.last_to_number, qtd: r.qtd, percentual: qtdMacro > 0 ? r.qtd / qtdMacro : 0 };
+      });
 
     // ===== Insight automático: aponta o sinal mais concentrado encontrado =====
     let insight;
@@ -312,30 +325,30 @@ function obterAnaliseCausaRaiz(filtroEstacao) {
   const cardPacked = cards.filter(function(c) { return c.macro_status === 'SOC_Packed'; })[0];
 
   if (cardPacked) {
-    const queryMassivo = `
-      SELECT COUNT(DISTINCT shipment_id) AS qtd
-      FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
-      WHERE station_code LIKE 'SOC-%'
-        AND macro_status = 'SOC_Packed'
-        AND actual_station_code != station_code
-        ${condicao}
-    `;
-    const massivoRows = executarQuery_(queryMassivo);
-    const qtdMassivo = massivoRows.length > 0 ? paraNumero_(massivoRows[0].qtd) : 0;
-
-    const queryFanout = `
-      SELECT actual_station_code, COUNT(DISTINCT shipment_id) AS qtd
-      FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
-      WHERE station_code LIKE 'SOC-%'
-        AND macro_status = 'SOC_Packed'
-        AND actual_station_code != station_code
-        ${condicao}
-      GROUP BY actual_station_code
+    // ===== Recebimento massivo: total + TOP 3 estações destino, numa query só =====
+    // Antes: queryMassivo (só o total) e queryFanout (top 3 por estação)
+    // eram 2 queries com o MESMO filtro base - mesmo padrão mecânico já
+    // consolidado acima (agregado + SUM(...) OVER() pro total, QUALIFY +
+    // ROW_NUMBER() pro top 3).
+    const queryMassivoDetalhado = `
+      WITH agregado AS (
+        SELECT actual_station_code, COUNT(DISTINCT shipment_id) AS qtd
+        FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
+        WHERE station_code LIKE 'SOC-%'
+          AND macro_status = 'SOC_Packed'
+          AND actual_station_code != station_code
+          ${condicao}
+        GROUP BY actual_station_code
+      )
+      SELECT actual_station_code, qtd, SUM(qtd) OVER () AS total
+      FROM agregado
+      QUALIFY ROW_NUMBER() OVER (ORDER BY qtd DESC) <= 3
       ORDER BY qtd DESC
-      LIMIT 3
     `;
-    const fanoutRows = executarQuery_(queryFanout);
-    fanoutRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); });
+    const massivoDetalhadoRows = executarQuery_(queryMassivoDetalhado);
+    massivoDetalhadoRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); r.total = paraNumero_(r.total); });
+    const qtdMassivo = massivoDetalhadoRows.length > 0 ? massivoDetalhadoRows[0].total : 0;
+    const fanoutRows = massivoDetalhadoRows;
 
     const querySubStatusFiltrado = `
       SELECT last_status, COUNT(DISTINCT shipment_id) AS qtd
@@ -490,36 +503,29 @@ function obterAnaliseCausaRaiz(filtroEstacao) {
     // ===== TO Completa (whole_to = 'SIM' AND qtd_to > 2) - calculado
     // separadamente pros dois grupos (recebimento massivo vs sem handover),
     // pra ver se esse padrão de TO completa concentra mais num grupo ou noutro.
-    const queryTOCompletaMassivo = `
-      SELECT COUNT(DISTINCT shipment_id) AS qtd
-      FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
-      WHERE station_code LIKE 'SOC-%'
-        AND macro_status = 'SOC_Packed'
-        AND actual_station_code != station_code
-        AND whole_to = 'SIM'
-        AND qtd_to > 2
-        ${condicao}
-    `;
-    const toCompletaMassivoRows = executarQuery_(queryTOCompletaMassivo);
-    const qtdTOCompletaMassivo = toCompletaMassivoRows.length > 0 ? paraNumero_(toCompletaMassivoRows[0].qtd) : 0;
-
-    // TOP 3 actual_station_code dentro do grupo "TO Completa + Recebimento
-    // Massivo" - pra saber pra onde estão indo especificamente esses casos.
-    const queryTOCompletaMassivoPorEstacao = `
-      SELECT actual_station_code, COUNT(DISTINCT shipment_id) AS qtd
-      FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
-      WHERE station_code LIKE 'SOC-%'
-        AND macro_status = 'SOC_Packed'
-        AND actual_station_code != station_code
-        AND whole_to = 'SIM'
-        AND qtd_to > 2
-        ${condicao}
-      GROUP BY actual_station_code
+    // ===== TO Completa + Recebimento Massivo: total + TOP 3 estações, numa
+    // query só (mesmo padrão mecânico usado acima) =====
+    const queryTOCompletaMassivoDetalhado = `
+      WITH agregado AS (
+        SELECT actual_station_code, COUNT(DISTINCT shipment_id) AS qtd
+        FROM \`${BQ_CONFIG.PROJECT_ID}.${BQ_CONFIG.DATASET_ID}.inventory_forecast_losses_fwd\`
+        WHERE station_code LIKE 'SOC-%'
+          AND macro_status = 'SOC_Packed'
+          AND actual_station_code != station_code
+          AND whole_to = 'SIM'
+          AND qtd_to > 2
+          ${condicao}
+        GROUP BY actual_station_code
+      )
+      SELECT actual_station_code, qtd, SUM(qtd) OVER () AS total
+      FROM agregado
+      QUALIFY ROW_NUMBER() OVER (ORDER BY qtd DESC) <= 3
       ORDER BY qtd DESC
-      LIMIT 3
     `;
-    const toCompletaMassivoPorEstacaoRows = executarQuery_(queryTOCompletaMassivoPorEstacao);
-    toCompletaMassivoPorEstacaoRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); });
+    const toCompletaMassivoDetalhadoRows = executarQuery_(queryTOCompletaMassivoDetalhado);
+    toCompletaMassivoDetalhadoRows.forEach(function(r) { r.qtd = paraNumero_(r.qtd); r.total = paraNumero_(r.total); });
+    const qtdTOCompletaMassivo = toCompletaMassivoDetalhadoRows.length > 0 ? toCompletaMassivoDetalhadoRows[0].total : 0;
+    const toCompletaMassivoPorEstacaoRows = toCompletaMassivoDetalhadoRows;
 
     const queryTOCompletaNaoMassivo = `
       SELECT COUNT(DISTINCT shipment_id) AS qtd
