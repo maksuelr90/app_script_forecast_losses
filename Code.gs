@@ -25,7 +25,12 @@ function verificarAtualizacaoAoAbrir() {
   const props = PropertiesService.getScriptProperties();
 
   if (props.getProperty(SYNC_PROPS_KEYS.STATUS) === 'IN_PROGRESS') {
-    return { status: 'atualizando', grassDatetime: obterGrassDatetimeFormatado_() };
+    return {
+      status: 'atualizando',
+      grassDatetime: obterGrassDatetimeFormatado_(),
+      progresso: calcularProgressoSincronizacao_(),
+      ultimoLog: props.getProperty(SYNC_PROPS_KEYS.ULTIMO_LOG)
+    };
   }
 
   // false = respeita a checagem de grass_datetime (só sincroniza se houver
@@ -34,19 +39,21 @@ function verificarAtualizacaoAoAbrir() {
 
   const statusFinal = props.getProperty(SYNC_PROPS_KEYS.STATUS);
   const grassDatetime = obterGrassDatetimeFormatado_();
+  const progresso = calcularProgressoSincronizacao_();
+  const ultimoLog = props.getProperty(SYNC_PROPS_KEYS.ULTIMO_LOG);
 
   if (statusFinal === 'IN_PROGRESS') {
     // Divergência encontrada - trigger já agendado, trabalho pesado
     // continua no servidor.
-    return { status: 'atualizando', grassDatetime: grassDatetime };
+    return { status: 'atualizando', grassDatetime: grassDatetime, progresso: progresso, ultimoLog: ultimoLog };
   }
 
   if (statusFinal === 'ERROR') {
-    return { status: 'erro', grassDatetime: grassDatetime };
+    return { status: 'erro', grassDatetime: grassDatetime, progresso: progresso, ultimoLog: ultimoLog };
   }
 
   // STATUS === 'DONE' -> a checagem rodou e não havia nada pra atualizar.
-  return { status: 'ja_atualizada', grassDatetime: grassDatetime };
+  return { status: 'ja_atualizada', grassDatetime: grassDatetime, progresso: progresso, ultimoLog: ultimoLog };
 }
 
 // Chamada pelo front-end em polling (a cada X segundos) enquanto uma
@@ -59,18 +66,31 @@ function obterStatusSincronizacao() {
   return {
     emAndamento: status === 'IN_PROGRESS',
     status: status,
-    grassDatetime: obterGrassDatetimeFormatado_()
+    grassDatetime: obterGrassDatetimeFormatado_(),
+    progresso: calcularProgressoSincronizacao_(),
+    ultimoLog: props.getProperty(SYNC_PROPS_KEYS.ULTIMO_LOG)
   };
 }
 
-// Lê o grass_datetime mais recente já gravado no BigQuery (tabela oficial da
-// fonte de referência "fwd", a mesma usada como referência em DataBase.gs) e
-// devolve formatado como dd/MM/yyyy HH:mm. Retorna null se ainda não houver dado.
+// Lê o grass_datetime mais recente. Enquanto uma sincronização está em
+// andamento, usa o valor JÁ DETECTADO na checagem de freshness (DataSuite) -
+// sabemos essa data desde o instante em que a divergência foi encontrada,
+// sem precisar esperar a tabela oficial do BigQuery ser atualizada. Fora
+// disso, lê da tabela oficial do BigQuery (fonte de referência "fwd").
+// Devolve formatado como dd/MM/yyyy HH:mm, ou null se não houver dado ainda.
 function obterGrassDatetimeFormatado_() {
-  const tabelaReferencia = SOURCES[0].tableId; // 'fwd'
-  const bruto = obterUltimoGrassDatetimeBigQuery_(tabelaReferencia);
-  const epochMs = normalizarGrassDatetime_(bruto);
+  const props = PropertiesService.getScriptProperties();
+  const grassDetectado = props.getProperty(SYNC_PROPS_KEYS.GRASS_DETECTADO);
 
+  let bruto;
+  if (props.getProperty(SYNC_PROPS_KEYS.STATUS) === 'IN_PROGRESS' && grassDetectado) {
+    bruto = grassDetectado;
+  } else {
+    const tabelaReferencia = SOURCES[0].tableId; // 'fwd'
+    bruto = obterUltimoGrassDatetimeBigQuery_(tabelaReferencia);
+  }
+
+  const epochMs = normalizarGrassDatetime_(bruto);
   if (epochMs === null) return null;
 
   return Utilities.formatDate(new Date(epochMs), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
