@@ -13,7 +13,8 @@ const CONFIG = {
   // (separadas por ESPAÇO - padrão OAuth2 - e não por vírgula)
   SCOPE: 'brbi_opslgc.inventory_forecast_losses_fwd ' +
          'brbi_opslgc.inventory_forecast_losses_losses ' +
-         'brbi_opslgc.inventory_forecast_losses_volume'
+         'brbi_opslgc.inventory_forecast_losses_volume ' +
+         'brbi_opslgc.inventory_forecast_losses_last_update'
 };
 
 // ===== CONFIGURAÇÃO DO BIGQUERY (compartilhada entre todas as fontes) =====
@@ -49,6 +50,15 @@ const SOURCES = [
     tempTableId: 'inventory_forecast_losses_volume_temp'
   }
 ];
+
+// ===== FONTE LEVE - só pra checar a última atualização (grass_datetime) =====
+// Retorna apenas 1 linha, então é muito mais barata/rápida que consultar a
+// fonte de referência "fwd" inteira só pra saber se há divergência.
+const LAST_UPDATE_SOURCE = {
+  key: 'last_update',
+  apiName: 'brbi_opslgc.inventory_forecast_losses_last_update',
+  version: 'qdp4uimrclkpcy8p'
+};
 
 // ===== 1. Obter access token =====
 function getAccessToken_() {
@@ -392,74 +402,107 @@ const SYNC_PROPS_KEYS = {
   SCHEMA: 'SYNC_SCHEMA',
   STATUS: 'SYNC_STATUS',
   TOTAL_INSERIDAS: 'SYNC_TOTAL_INSERIDAS',
-  RETRY_COUNT: 'SYNC_RETRY_COUNT'
+  RETRY_COUNT: 'SYNC_RETRY_COUNT',
+  GRASS_DETECTADO: 'SYNC_GRASS_DETECTADO',
+  SHARDS_PROCESSADOS_TOTAL: 'SYNC_SHARDS_PROCESSADOS_TOTAL',
+  SHARDS_CONHECIDOS_TOTAL: 'SYNC_SHARDS_CONHECIDOS_TOTAL',
+  ULTIMO_LOG: 'SYNC_ULTIMO_LOG'
 };
 
 const SYNC_TRIGGER_HANDLER = 'continueSync_';
 const MAX_EXECUTION_MS = 5 * 60 * 1000 + 20 * 1000; // 5min20s - margem antes do limite de 6min
 const NOTIFICAR_A_CADA_TENTATIVAS = 5; // manda e-mail a cada 5 falhas consecutivas, sem parar de tentar
 
-// ===== Checa se há necessidade de atualização (fonte de referência: fwd) =====
-// Faz UMA chamada ao DataSuite (fonte de referência, "fwd"), compara o
-// grass_datetime mais recente com o que já está salvo no BigQuery. Retorna:
-//   - false: nada mudou, não precisa sincronizar nada
-//   - true: há divergência (ou "forcar" está ligado) - e já deixa preparado
-//     (job/shard 0 já carregados na tabela temp da fonte de referência,
-//     estado salvo em PropertiesService) para o restante do processamento
-//     continuar de onde essa função parou.
+// ===== Registra uma mensagem no Logger (como sempre) E guarda como o
+// "último log" da sincronização no PropertiesService, pra o front-end poder
+// exibir em tempo real que o processo está avançando (evita parecer travado
+// durante etapas demoradas, como aguardar um shard ou um load job). =====
+function registrarLogSync_(mensagem) {
+  Logger.log(mensagem);
+  try {
+    PropertiesService.getScriptProperties().setProperty(SYNC_PROPS_KEYS.ULTIMO_LOG, String(mensagem).slice(0, 300));
+  } catch (e) {
+    // Não deixa uma falha ao salvar o log derrubar o processo de sincronização.
+  }
+}
+
+// ===== Consulta o grass_datetime mais recente usando a API leve de checagem =====
+// (brbi_opslgc.inventory_forecast_losses_last_update - retorna só 1 linha).
+// Faz retries silenciosos em caso de erro (rede instável, job travado etc.) -
+// nunca propaga a exceção pro chamador. Se todas as tentativas falharem,
+// retorna null (o chamador entende isso como "não deu pra confirmar agora,
+// tentaremos de novo na próxima checagem" - sem forçar uma sincronização
+// desnecessária nem exibir erro pro usuário).
+function consultarUltimaAtualizacaoDataSuite_() {
+  const maxTentativas = 3;
+
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    try {
+      const token = getAccessToken_();
+      const jobId = triggerQuery_(token, LAST_UPDATE_SOURCE);
+      const meta = pollJobAteFinalizar_(token, jobId);
+      const fetchUrlTemplateCorrigido = meta.fetchUrlTemplate.replace(
+        'open-api.datasuite.shopee.io',
+        'open-api.datasuite.shopeemobile.com'
+      );
+      const shard0Json = buscarShard_(fetchUrlTemplateCorrigido, 0, token);
+      return extrairGrassDatetime_(shard0Json);
+    } catch (erro) {
+      Logger.log(`[last_update] Tentativa ${tentativa}/${maxTentativas} falhou (retry silencioso): ${erro.message}`);
+      if (tentativa < maxTentativas) {
+        Utilities.sleep(2000 * tentativa); // pequeno backoff crescente entre tentativas
+      }
+    }
+  }
+
+  Logger.log('[last_update] Não foi possível confirmar a última atualização após todas as tentativas silenciosas - checagem adiada.');
+  return null;
+}
+
+// ===== Checa se há necessidade de atualização (via API leve de last_update) =====
+// Retorna:
+//   - false: nada mudou (ou não foi possível confirmar agora) - não precisa sincronizar
+//   - true: há divergência (ou "forcar" está ligado)
 function executarChecagemFreshness_() {
   const props = PropertiesService.getScriptProperties();
   const forcar = props.getProperty(SYNC_PROPS_KEYS.FORCAR) === '1';
-  const fonteReferencia = SOURCES[0]; // "fwd" - deve permanecer a primeira da lista
 
-  Logger.log(`Checando necessidade de atualização (referência: fonte "${fonteReferencia.key}")...`);
+  if (forcar) {
+    Logger.log('Sincronização forçada - pulando checagem de freshness.');
+    props.setProperty(SYNC_PROPS_KEYS.CHECAGEM_FEITA, '1');
+    return true;
+  }
 
-  const token = getAccessToken_();
-  const jobId = triggerQuery_(token, fonteReferencia);
-  Logger.log(`[${fonteReferencia.key}] Job disparado: ${jobId}`);
+  registrarLogSync_('Checando necessidade de atualização (API leve last_update)...');
 
-  const meta = pollJobAteFinalizar_(token, jobId);
-  const fetchUrlTemplateCorrigido = meta.fetchUrlTemplate.replace(
-    'open-api.datasuite.shopee.io',
-    'open-api.datasuite.shopeemobile.com'
-  );
-
-  const shard0Json = buscarShard_(fetchUrlTemplateCorrigido, 0, token);
-  const schema = shard0Json.resultSchema || null;
-
-  const grassAtual = extrairGrassDatetime_(shard0Json);
-  const grassBQ = obterUltimoGrassDatetimeBigQuery_(fonteReferencia.tableId);
+  const grassAtual = consultarUltimaAtualizacaoDataSuite_();
   const epochAtual = normalizarGrassDatetime_(grassAtual);
-  const epochBQ = normalizarGrassDatetime_(grassBQ);
 
-  Logger.log(`grass_datetime DataSuite (bruto): ${grassAtual}`);
-  Logger.log(`grass_datetime BigQuery (bruto):  ${grassBQ}`);
-  Logger.log(`grass_datetime normalizado - DataSuite: ${epochAtual} | BigQuery: ${epochBQ}`);
-
-  if (!forcar && epochAtual !== null && epochAtual === epochBQ) {
+  if (epochAtual === null) {
+    // Falha silenciosa (já tentou algumas vezes) ou API sem dado ainda -
+    // não força sincronização; próxima checagem (manual ou periódica) tenta de novo.
+    Logger.log('Não foi possível confirmar o grass_datetime mais recente agora - nenhuma sincronização será iniciada.');
     return false;
   }
 
-  Logger.log('Divergência detectada (ou forçado) - todas as fontes serão sincronizadas.');
-  props.setProperty(SYNC_PROPS_KEYS.CHECAGEM_FEITA, '1');
+  const grassBQ = obterUltimoGrassDatetimeBigQuery_(SOURCES[0].tableId);
+  const epochBQ = normalizarGrassDatetime_(grassBQ);
 
-  // Aproveita o job/shard 0 já buscados para a fonte de referência (fwd),
-  // evitando refazer essa chamada quando o processamento retomar essa fonte.
-  apagarTabelaSeExistir_(fonteReferencia.tempTableId);
-  ensureTableExists_(schema, fonteReferencia.tempTableId);
+  Logger.log(`grass_datetime DataSuite (API leve, bruto): ${grassAtual}`);
+  Logger.log(`grass_datetime BigQuery (bruto): ${grassBQ}`);
+  Logger.log(`grass_datetime normalizado - DataSuite: ${epochAtual} | BigQuery: ${epochBQ}`);
 
-  let inseridasShard0 = 0;
-  if (shard0Json.rows && shard0Json.rows.length > 0) {
-    inseridasShard0 = insertRowsToBigQuery_(shard0Json.rows, schema, fonteReferencia.tempTableId);
-    Logger.log(`[${fonteReferencia.key}] Shard 0 - ${inseridasShard0} linhas gravadas na tabela temp.`);
+  if (epochAtual === epochBQ) {
+    return false;
   }
 
-  props.setProperty(SYNC_PROPS_KEYS.JOB_ID, jobId);
-  props.setProperty(SYNC_PROPS_KEYS.FETCH_URL_TEMPLATE, fetchUrlTemplateCorrigido);
-  props.setProperty(SYNC_PROPS_KEYS.MAX_SHARD, String(meta.maxShard));
-  props.setProperty(SYNC_PROPS_KEYS.NEXT_SHARD, '1');
-  props.setProperty(SYNC_PROPS_KEYS.SCHEMA, JSON.stringify(schema));
-  props.setProperty(SYNC_PROPS_KEYS.TOTAL_INSERIDAS, String(inseridasShard0));
+  Logger.log('Divergência detectada - todas as fontes serão sincronizadas.');
+  registrarLogSync_('Nova atualização detectada - iniciando sincronização das fontes...');
+  props.setProperty(SYNC_PROPS_KEYS.CHECAGEM_FEITA, '1');
+  // Já sabemos a data/hora mais recente detectada desde este momento - guarda
+  // pra front-end exibir sem precisar esperar a sincronização terminar e o
+  // dado ser regravado no BigQuery.
+  props.setProperty(SYNC_PROPS_KEYS.GRASS_DETECTADO, String(grassAtual));
 
   return true;
 }
@@ -595,6 +638,7 @@ function tratarErroSync_(erro) {
   props.setProperty(SYNC_PROPS_KEYS.RETRY_COUNT, String(tentativaAtual));
 
   Logger.log(`❌ Erro na sincronização (tentativa ${tentativaAtual}): ${erro.message}`);
+  registrarLogSync_(`⚠️ Falha temporária (tentativa ${tentativaAtual}) - tentando novamente automaticamente...`);
 
   // Notifica por e-mail a cada N tentativas consecutivas (não a cada uma,
   // pra não inundar a caixa de entrada) - só um aviso de "ainda não
@@ -685,6 +729,7 @@ function continueSyncInterno_() {
       props.setProperty(SYNC_PROPS_KEYS.STATUS, 'DONE');
       removerTriggerSync_();
       Logger.log('✅ Todas as fontes foram processadas. Sincronização concluída.');
+      registrarLogSync_('✅ Sincronização concluída - todas as fontes atualizadas.');
       return;
     }
 
@@ -696,10 +741,12 @@ function continueSyncInterno_() {
     if (!jobId) {
       // ===== Início do processamento desta fonte (sem checagem individual - já decidido na Fase 0) =====
       Logger.log(`--- Iniciando fonte "${source.key}" (${source.apiName}) ---`);
+      registrarLogSync_(`Iniciando fonte "${source.key}"...`);
 
       const token = getAccessToken_();
       const novoJobId = triggerQuery_(token, source);
       Logger.log(`[${source.key}] Job disparado: ${novoJobId}`);
+      registrarLogSync_(`[${source.key}] Consulta disparada, aguardando processamento...`);
 
       const meta = pollJobAteFinalizar_(token, novoJobId);
       const fetchUrlTemplateCorrigido = meta.fetchUrlTemplate.replace(
@@ -717,6 +764,7 @@ function continueSyncInterno_() {
       if (shard0Json.rows && shard0Json.rows.length > 0) {
         inseridasShard0 = insertRowsToBigQuery_(shard0Json.rows, schema, source.tempTableId);
         Logger.log(`[${source.key}] Shard 0 - ${inseridasShard0} linhas gravadas na tabela temp.`);
+        registrarLogSync_(`[${source.key}] Shard 0 gravado (${inseridasShard0} linhas) - shard 1 de ${meta.maxShard + 1}`);
       }
 
       props.setProperty(SYNC_PROPS_KEYS.JOB_ID, novoJobId);
@@ -725,6 +773,11 @@ function continueSyncInterno_() {
       props.setProperty(SYNC_PROPS_KEYS.NEXT_SHARD, '1');
       props.setProperty(SYNC_PROPS_KEYS.SCHEMA, JSON.stringify(schema));
       props.setProperty(SYNC_PROPS_KEYS.TOTAL_INSERIDAS, String(inseridasShard0));
+
+      // Progresso global (todas as fontes): agora sabemos quantos shards essa
+      // fonte tem no total (maxShard+1) - soma ao total conhecido - e o shard
+      // 0 dela já foi processado - soma ao total processado.
+      incrementarProgressoShards_(meta.maxShard + 1, 1);
 
       fetchUrlTemplate = fetchUrlTemplateCorrigido;
       maxShard = meta.maxShard;
@@ -746,6 +799,7 @@ function continueSyncInterno_() {
       ensureTableExists_(resultSchema, source.tempTableId);
 
       Logger.log(`[${source.key}] Retomando a partir do shard ${nextShard} (de 0 a ${maxShard})`);
+      registrarLogSync_(`[${source.key}] Retomando do shard ${nextShard} de ${maxShard + 1}...`);
     }
 
     // ===== Processa os shards restantes desta fonte =====
@@ -757,6 +811,7 @@ function continueSyncInterno_() {
         props.setProperty(SYNC_PROPS_KEYS.TOTAL_INSERIDAS, String(totalInseridas));
         agendarContinuacaoSync_();
         Logger.log(`[${source.key}] Pausando no shard ${nextShard}/${maxShard}. Continuação agendada.`);
+        registrarLogSync_(`[${source.key}] Pausa técnica no shard ${nextShard} de ${maxShard + 1} - continuando em instantes...`);
         return;
       }
 
@@ -768,14 +823,18 @@ function continueSyncInterno_() {
         Logger.log(`[${source.key}] Shard ${nextShard} - ${inseridas} linhas (total: ${totalInseridas})`);
       }
 
+      registrarLogSync_(`[${source.key}] Shard ${nextShard} de ${maxShard + 1} gravado (total da fonte: ${totalInseridas} linhas)`);
+
       nextShard++;
       props.setProperty(SYNC_PROPS_KEYS.NEXT_SHARD, String(nextShard));
       props.setProperty(SYNC_PROPS_KEYS.TOTAL_INSERIDAS, String(totalInseridas));
+      incrementarProgressoShards_(0, 1); // mais 1 shard processado (progresso global)
     }
 
     // ===== Fonte concluída: troca temp -> oficial e avança para a próxima =====
     trocarTabelaTempPelaOficial_(source.tableId, source.tempTableId);
     Logger.log(`[${source.key}] ✅ Concluído. Total de linhas: ${totalInseridas}.`);
+    registrarLogSync_(`[${source.key}] ✅ Concluído (${totalInseridas} linhas gravadas)`);
 
     avancarParaProximaFonte_(props);
   }
@@ -817,6 +876,50 @@ function removerTriggerSync_() {
 function limparEstadoSync_() {
   const props = PropertiesService.getScriptProperties();
   Object.values(SYNC_PROPS_KEYS).forEach(key => props.deleteProperty(key));
+}
+
+// ===== Incrementa (de forma atômica o quanto der) os contadores globais de =====
+// ===== progresso: shards conhecidos até agora e shards já processados. =====
+// conhecidosNovos: quantos shards a MAIS passaram a ser conhecidos agora
+// (normalmente maxShard+1 de uma fonte que acabou de iniciar; 0 se nenhum).
+// processadosNovos: quantos shards a MAIS foram processados agora (1 na
+// maioria das chamadas - um shard de cada vez).
+function incrementarProgressoShards_(conhecidosNovos, processadosNovos) {
+  const props = PropertiesService.getScriptProperties();
+
+  if (conhecidosNovos) {
+    const conhecidosAtual = parseInt(props.getProperty(SYNC_PROPS_KEYS.SHARDS_CONHECIDOS_TOTAL) || '0', 10);
+    props.setProperty(SYNC_PROPS_KEYS.SHARDS_CONHECIDOS_TOTAL, String(conhecidosAtual + conhecidosNovos));
+  }
+
+  if (processadosNovos) {
+    const processadosAtual = parseInt(props.getProperty(SYNC_PROPS_KEYS.SHARDS_PROCESSADOS_TOTAL) || '0', 10);
+    props.setProperty(SYNC_PROPS_KEYS.SHARDS_PROCESSADOS_TOTAL, String(processadosAtual + processadosNovos));
+  }
+}
+
+// ===== Calcula o progresso percentual (0-100) da sincronização em andamento =====
+// Baseado nos shards REAIS devolvidos pela API conforme vão sendo gravados no
+// BigQuery: progresso = shards processados / shards conhecidos até agora.
+// O total "conhecido" cresce à medida que cada fonte começa (quando
+// descobrimos quantos shards ela tem) - por isso o percentual pode oscilar
+// um pouco pra baixo quando uma nova fonte começa, mas sempre reflete o
+// progresso real de gravação, sem travar.
+function calcularProgressoSincronizacao_() {
+  const props = PropertiesService.getScriptProperties();
+  const status = props.getProperty(SYNC_PROPS_KEYS.STATUS);
+
+  if (status !== 'IN_PROGRESS') {
+    return status === 'DONE' ? 100 : 0;
+  }
+
+  const processados = parseInt(props.getProperty(SYNC_PROPS_KEYS.SHARDS_PROCESSADOS_TOTAL) || '0', 10);
+  const conhecidos = parseInt(props.getProperty(SYNC_PROPS_KEYS.SHARDS_CONHECIDOS_TOTAL) || '0', 10);
+
+  if (!conhecidos) return 0; // ainda nem começou a processar shard nenhum
+
+  const progresso = (processados / conhecidos) * 100;
+  return Math.max(0, Math.min(100, Math.round(progresso)));
 }
 
 // ===== Utilitário: consultar o progresso atual sem disparar nada =====
